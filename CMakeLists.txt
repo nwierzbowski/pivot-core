@@ -1,4 +1,6 @@
-# Core subproject for shared headers
+# CMakeLists.txt for Elbo Studio Core Interfaces
+# Copyright (C) 2025 Nicholas Wierzbowski / Elbo Studio
+# Defines the core interface library for all Elbo Studio components.
 
 if(NOT TARGET core)
   add_library(core INTERFACE)
