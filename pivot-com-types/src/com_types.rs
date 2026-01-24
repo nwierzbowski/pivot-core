@@ -6,6 +6,7 @@ pub const OP_SET_SURFACE_TYPES: u16 = 3;
 pub const OP_DROP_GROUPS: u16 = 4;
 pub const OP_ORGANIZE_OBJECTS: u16 = 5;
 pub const OP_GET_SURFACE_TYPES: u16 = 6;
+pub const OP_STOP_ENGINE: u16 = 7;
 // Fixed-size strings are essential for Zero-Copy structs
 pub const MAX_NAME_LEN: usize = 64;
 pub const MAX_HANDLE_LEN: usize = 32; // For OS SHM paths
