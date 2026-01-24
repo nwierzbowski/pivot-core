@@ -161,7 +161,6 @@ impl GroupFull {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, ZeroCopySend)]
-#[type_name("PivotEngineCommand")]
 pub struct EngineCommand {
     pub payload_mode: u8, // 0: Inline Data, 1: SHM Handles
     pub should_cache: u8,
@@ -193,7 +192,6 @@ impl EngineCommand {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, ZeroCopySend)]
-#[type_name("PivotEngineResponse")]
 pub struct EngineResponse {
     pub status: u32, // 0 for OK, 1 for Error, etc.
 }
