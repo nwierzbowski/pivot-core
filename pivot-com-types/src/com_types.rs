@@ -1,0 +1,198 @@
+use iceoryx2::prelude::ZeroCopySend;
+
+pub const OP_STANDARDIZE_GROUPS: u16 = 1;
+pub const OP_STANDARDIZE_SYNCED_GROUPS: u16 = 2;
+pub const OP_SET_SURFACE_TYPES: u16 = 3;
+pub const OP_DROP_GROUPS: u16 = 4;
+pub const OP_ORGANIZE_OBJECTS: u16 = 5;
+pub const OP_GET_SURFACE_TYPES: u16 = 6;
+// Fixed-size strings are essential for Zero-Copy structs
+pub const MAX_NAME_LEN: usize = 64;
+pub const MAX_HANDLE_LEN: usize = 32; // For OS SHM paths
+pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+pub struct GroupNames {
+    pub group_name: [u8; MAX_NAME_LEN],
+}
+
+impl GroupNames {
+    pub fn new(group_name: &str) -> Self {
+        let mut gn = GroupNames {
+            group_name: [0; MAX_NAME_LEN],
+        };
+        let bytes = group_name.as_bytes();
+        let len = bytes.len().min(MAX_NAME_LEN - 1);
+        gn.group_name[..len].copy_from_slice(&bytes[..len]);
+        gn
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+pub struct GroupSurface {
+    pub group_name: [u8; MAX_NAME_LEN],
+    pub surface_type: u64, // "wood", "metal", etc.
+}
+
+impl GroupSurface {
+    pub fn new(group_name: &str, surface_type: u64) -> Self {
+
+        let mut surf = GroupSurface {
+            group_name: [0; MAX_NAME_LEN],
+            surface_type,
+        };
+
+        surf.set_group_name(group_name);
+        surf
+    }
+
+    fn set_group_name(&mut self, name: &str) {
+        let bytes = name.as_bytes();
+        let len = bytes.len().min(MAX_NAME_LEN - 1);
+        self.group_name[..len].copy_from_slice(&bytes[..len]);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+pub struct GroupFull {
+    // --- Offsets into mesh_shm_handle (The "Address Book") ---
+    pub offset_verts: u64,       //Points to f32[] in shm
+    pub offset_edges: u64,       //Points to u32[] in shm
+    pub offset_rotations: u64,   //Points to f[32] in shm
+    pub offset_scales: u64,      //Points to f[32] in shm
+    pub offset_offsets: u64,     //Points to f[32] in shm
+    pub offset_vert_counts: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
+    pub offset_edge_counts: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
+
+    // --- Totals ---
+    pub object_count: u32,     // Total objects in this group
+    pub surface_context: u32,  // Id for surface context
+
+    pub group_name: [u8; MAX_NAME_LEN], //Human readable name for group
+    pub mesh_shm_handle: [u8; MAX_HANDLE_LEN], // The single SHM containing ALL data for this group
+}
+
+impl GroupFull {
+    pub fn new(
+        total_verts: u32,
+        total_edges: u32,
+        object_count: u32,
+        surface_context: u32,
+        group_name: &str,
+        shm_handle: &str,
+    ) -> (u64, Self) {
+        let mut cursor = 0;
+
+        // Helper to align the cursor to the next 8-byte boundary
+        // This is a bitwise trick: (x + 7) & !7
+        fn align_to_8(val: u64) -> u64 {
+            (val + 7) & !7
+        }
+
+        // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
+        let offset_verts = cursor;
+        cursor = align_to_8(offset_verts + (total_verts as u64 * 12));
+
+        // 2. Edges: [u32; total_edge_count * 2] -> 8 bytes per edge
+        let offset_edges = cursor;
+        cursor = align_to_8(offset_edges + (total_edges as u64 * 8));
+
+        // 3. Rotations (Quaternions): [f32; total_objects * 4] -> 16 bytes per object
+        let offset_rotations = cursor;
+        cursor = align_to_8(offset_rotations + (object_count as u64 * 16));
+
+        // 4. Scales: [f32; total_objects * 3] -> 12 bytes per object
+        let offset_scales = cursor;
+        cursor = align_to_8(offset_scales + (object_count as u64 * 12));
+
+        // 5. Offsets (Translations): [f32; total_objects * 3] -> 12 bytes per object
+        let offset_offsets = cursor;
+        cursor = align_to_8(offset_offsets + (object_count as u64 * 12));
+
+        // 6. Vert Counts: [u32; total_objects] -> 4 bytes per object + 1 for total at the end
+        let offset_vert_counts = cursor;
+        cursor = align_to_8(offset_vert_counts + ((object_count + 1) as u64 * 4));
+
+        // 7. Edge Counts: [u32; total_objects] -> 4 bytes per object +1 for total at the end
+        let offset_edge_counts = cursor;
+        cursor = align_to_8(offset_edge_counts + ((object_count + 1) as u64 * 4));
+        // The final cursor value is the total bytes needed for the SHM segment
+        let total_size = cursor;
+
+        // 8. Construct the GroupFull "Blueprint"
+        let mut group_metadata = self::GroupFull {
+            offset_verts,
+            offset_edges,
+            offset_rotations,
+            offset_scales,
+            offset_offsets,
+            offset_vert_counts,
+            offset_edge_counts,
+            object_count,
+            surface_context,
+            group_name: [0; MAX_NAME_LEN],
+            mesh_shm_handle: [0; MAX_HANDLE_LEN],
+        };
+
+        // Helper to copy strings into fixed u8 arrays
+        group_metadata.set_group_name(group_name);
+        group_metadata.set_shm_handle(shm_handle);
+
+        (total_size, group_metadata)
+    }
+
+    // Helpers to safely handle the fixed [u8] arrays
+    fn set_group_name(&mut self, name: &str) {
+        let bytes = name.as_bytes();
+        let len = bytes.len().min(MAX_NAME_LEN - 1);
+        self.group_name[..len].copy_from_slice(&bytes[..len]);
+    }
+
+    fn set_shm_handle(&mut self, handle: &str) {
+        let bytes = handle.as_bytes();
+        let len = bytes.len().min(MAX_HANDLE_LEN - 1);
+        self.mesh_shm_handle[..len].copy_from_slice(&bytes[..len]);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+#[type_name("PivotEngineCommand")]
+pub struct EngineCommand {
+    pub payload_mode: u8, // 0: Inline Data, 1: SHM Handles
+    pub should_cache: u8,
+    pub op_id: u16, // 1: Standardize, 2: GetMeta, 3: Organize, 4: Drop
+
+    pub num_groups: u32,
+
+    pub inline_data: [u8; MAX_INLINE_DATA],
+
+    pub shm_fallback_handle: [u8; MAX_HANDLE_LEN],
+}
+
+impl EngineCommand {
+    pub fn copy_payload_into_inline<T>(&mut self, payload: &[T])
+    where
+        T: Sized,
+    {
+        unsafe {
+            let meta_ptr = payload.as_ptr() as *const u8;
+            let meta_size = std::mem::size_of::<T>() * payload.len();
+            std::ptr::copy_nonoverlapping(
+                meta_ptr,
+                self.inline_data.as_mut_ptr(),
+                meta_size.min(MAX_INLINE_DATA),
+            );
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+#[type_name("PivotEngineResponse")]
+pub struct EngineResponse {
+    pub status: u32, // 0 for OK, 1 for Error, etc.
+}
