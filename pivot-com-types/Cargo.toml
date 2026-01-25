@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 iceoryx2 = "0.8.1"
+iceoryx2-bb-posix = "0.8.1"

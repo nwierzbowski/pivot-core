@@ -1,4 +1,5 @@
-use iceoryx2::prelude::ZeroCopySend;
+use iceoryx2::prelude::*;
+use iceoryx2_bb_posix::shared_memory::*;
 
 pub const OP_STANDARDIZE_GROUPS: u16 = 1;
 pub const OP_STANDARDIZE_SYNCED_GROUPS: u16 = 2;
@@ -98,7 +99,8 @@ impl AssetMeta {
         object_count: u32,
         surface_context: u16,
         group_name: &str,
-    ) -> (u64, Self) {
+        handle_name: &str,
+    ) -> Result<(SharedMemory, Self), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
         fn align_to_8(val: u64) -> u64 {
@@ -142,6 +144,14 @@ impl AssetMeta {
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
 
+        let shm = Self::create_shm_segment(
+            &handle_name,
+            total_size.try_into().expect(&format!(
+                "Mesh size {} exceeds system address space (usize)",
+                total_size
+            )),
+        )?;
+
         // 8. Construct the GroupFull "Blueprint"
         let group_metadata = self::AssetMeta {
             offset_uuids,
@@ -159,7 +169,21 @@ impl AssetMeta {
             surface_context,
         };
 
-        (total_size, group_metadata)
+        Ok((shm, group_metadata))
+    }
+
+    fn create_shm_segment(name: &str, size: usize) -> Result<SharedMemory, String> {
+        let file_name = FileName::new(name.as_bytes())
+            .map_err(|e| format!("invalid shared memory name '{}': {:?}", name, e))?;
+
+        SharedMemoryBuilder::new(&file_name)
+            .is_memory_locked(false)
+            .creation_mode(CreationMode::PurgeAndCreate)
+            .size(size)
+            .permission(Permission::OWNER_ALL | Permission::GROUP_ALL)
+            .zero_memory(true)
+            .create()
+            .map_err(|e| format!("failed to create shared memory '{}': {:?}", name, e))
     }
 }
 
