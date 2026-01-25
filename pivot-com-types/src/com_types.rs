@@ -101,8 +101,6 @@ impl AssetMeta {
         surface_context: u16,
         group_name: &str,
         handle_name: &str,
-        object_names: Vec<String>,
-        object_name_lengths: Vec<u16>,
     ) -> Result<(SharedMemory, Self), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
