@@ -62,6 +62,15 @@ pub struct ShmOffset {
     pub mesh_shm_handle: [u8; MAX_HANDLE_LEN], // The single SHM containing ALL data for this group
 }
 
+impl ShmOffset {
+    pub fn new(meta_data_offset: u64, mesh_shm_handle: [u8; MAX_HANDLE_LEN]) -> Self {
+        Self {
+            meta_data_offset,
+            mesh_shm_handle,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AssetMeta {
