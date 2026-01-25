@@ -57,7 +57,7 @@ impl GroupSurface {
 }
 
 #[repr(C)]
-pub struct AssetPtr {
+pub struct ShmOffset {
     pub meta_data_offset: u64,
     pub mesh_shm_handle: [u8; MAX_HANDLE_LEN], // The single SHM containing ALL data for this group
 }
@@ -90,13 +90,14 @@ impl AssetMeta {
         surface_context: u16,
         group_name: &str,
     ) -> (u64, Self) {
-        let mut cursor = 0;
-
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
         fn align_to_8(val: u64) -> u64 {
             (val + 7) & !7
         }
+
+        let mut cursor = size_of::<Self>() as u64;
+
         let offset_uuids = cursor;
         cursor = align_to_8(offset_uuids + (object_count as u64 * 16));
 
@@ -149,17 +150,8 @@ impl AssetMeta {
             surface_context,
         };
 
-        // Helper to copy strings into fixed u8 arrays
-        // group_metadata.set_group_name(group_name);
-
         (total_size, group_metadata)
     }
-
-    // Helpers to safely handle the fixed [u8] arrays
-    // fn set_group_name(&mut self, name: &str) {
-    //     let bytes = name.as_bytes();
-    //     self.group_name[..bytes.len()].copy_from_slice(&bytes[..bytes.len()]);
-    // }
 }
 
 #[repr(C)]
