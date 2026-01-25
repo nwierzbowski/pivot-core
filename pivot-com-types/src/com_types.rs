@@ -101,6 +101,8 @@ impl AssetMeta {
         surface_context: u16,
         group_name: &str,
         handle_name: &str,
+        object_names: Vec<String>,
+        object_name_lengths: Vec<u16>,
     ) -> Result<(SharedMemory, Self), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
@@ -137,21 +139,13 @@ impl AssetMeta {
         cursor = align_to_8(offset_object_names + (object_count as u64 * MAX_NAME_LEN as u64));
 
         let offset_object_name_lengths = cursor;
-        cursor = align_to_8(offset_object_name_lengths + (object_count as u64 * 4));
+        cursor = align_to_8(offset_object_name_lengths + (object_count as u64 * 2));
 
         let offset_group_name = cursor;
         cursor = align_to_8(offset_group_name + (group_name.len() as u64));
 
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
-
-        let shm = Self::create_shm_segment(
-            &handle_name,
-            total_size.try_into().expect(&format!(
-                "Mesh size {} exceeds system address space (usize)",
-                total_size
-            )),
-        )?;
 
         // 8. Construct the GroupFull "Blueprint"
         let group_metadata = self::AssetMeta {
@@ -172,10 +166,17 @@ impl AssetMeta {
             surface_context,
         };
 
+        let shm = group_metadata.create_shm_segment(
+            &handle_name,
+            total_size as usize,
+        )?;
+
+        group_metadata.write_group_name(&shm, group_name);
+
         Ok((shm, group_metadata))
     }
 
-    pub unsafe fn get_group_name<'a>(&self, shm_base: *const u8) -> &'a str {
+    pub fn get_group_name<'a>(&self, shm_base: *const u8) -> &'a str {
         unsafe {
             let ptr = shm_base.add(self.offset_group_name as usize);
             let slice = std::slice::from_raw_parts(ptr, self.group_name_length as usize);
@@ -183,7 +184,15 @@ impl AssetMeta {
         }
     }
 
-    fn create_shm_segment(name: &str, size: usize) -> Result<SharedMemory, String> {
+    fn write_group_name(&self, shm: &SharedMemory, group_name: &str) {
+        unsafe {
+            let base_ptr = shm.base_address().as_ptr() as *mut u8;
+            let ptr = base_ptr.add(self.offset_group_name as usize);
+            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr, group_name.len());
+        }
+    }
+
+    fn create_shm_segment(&self, name: &str, size: usize) -> Result<SharedMemory, String> {
         let file_name = FileName::new(name.as_bytes())
             .map_err(|e| format!("invalid shared memory name '{}': {:?}", name, e))?;
 
