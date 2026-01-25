@@ -40,7 +40,6 @@ pub struct GroupSurface {
 
 impl GroupSurface {
     pub fn new(group_name: &str, surface_type: u64) -> Self {
-
         let mut surf = GroupSurface {
             group_name: [0; MAX_NAME_LEN],
             surface_type,
@@ -76,20 +75,22 @@ impl ShmOffset {
 #[derive(Debug, Clone)]
 pub struct AssetMeta {
     // --- Offsets into mesh_shm_handle (The "Address Book") ---
-    pub offset_uuids: u64,       //Points to [u8; 16][] in shm
-    pub offset_verts: u64,       //Points to f32[] in shm
-    pub offset_edges: u64,       //Points to u32[] in shm
+    pub offset_uuids: u64,      //Points to [u8; 16][] in shm
+    pub offset_verts: u64,      //Points to f32[] in shm
+    pub offset_edges: u64,      //Points to u32[] in shm
     pub offset_vert_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
     pub offset_edge_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
     pub offset_transforms: u64, //Points to Transform[] in shm
-    pub offset_object_names: u64, 
+    pub offset_object_names: u64,
     pub offset_object_name_lengths: u64,
     pub offset_group_name: u64, //Points to the group name string in shm
-    
+
     // --- Totals ---
-    pub object_count: u32,     // Total objects in this group
+    pub vert_count: u32,
+    pub edge_count: u32,
+    pub object_count: u32, // Total objects in this group
     pub group_name_length: u16,
-    pub surface_context: u16,  // Id for surface context
+    pub surface_context: u16, // Id for surface context
 }
 
 impl AssetMeta {
@@ -124,13 +125,13 @@ impl AssetMeta {
         let offset_transforms = cursor;
         cursor = align_to_8(offset_transforms + (object_count as u64 * 64));
 
-        // 6. Vert Counts: [u32; total_objects] -> 4 bytes per object + 1 for total at the end
+        // 6. Vert Counts: [u32; total_objects] -> 4 bytes per object
         let offset_vert_bases = cursor;
-        cursor = align_to_8(offset_vert_bases + ((object_count + 1) as u64 * 4));
+        cursor = align_to_8(offset_vert_bases + (object_count as u64 * 4));
 
-        // 7. Edge Counts: [u32; total_objects] -> 4 bytes per object +1 for total at the end
+        // 7. Edge Counts: [u32; total_objects] -> 4 bytes per object
         let offset_edge_bases = cursor;
-        cursor = align_to_8(offset_edge_bases + ((object_count + 1) as u64 * 4));
+        cursor = align_to_8(offset_edge_bases + (object_count as u64 * 4));
 
         let offset_object_names = cursor;
         cursor = align_to_8(offset_object_names + (object_count as u64 * MAX_NAME_LEN as u64));
@@ -164,12 +165,22 @@ impl AssetMeta {
             offset_object_name_lengths,
             offset_group_name,
 
+            vert_count: total_verts,
+            edge_count: total_edges,
             object_count,
             group_name_length: group_name.len() as u16,
             surface_context,
         };
 
         Ok((shm, group_metadata))
+    }
+
+    pub unsafe fn get_group_name<'a>(&self, shm_base: *const u8) -> &'a str {
+        unsafe {
+            let ptr = shm_base.add(self.offset_group_name as usize);
+            let slice = std::slice::from_raw_parts(ptr, self.group_name_length as usize);
+            std::str::from_utf8_unchecked(slice)
+        }
     }
 
     fn create_shm_segment(name: &str, size: usize) -> Result<SharedMemory, String> {
