@@ -57,33 +57,38 @@ impl GroupSurface {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, ZeroCopySend)]
-pub struct GroupFull {
-    // --- Offsets into mesh_shm_handle (The "Address Book") ---
-    pub offset_verts: u64,       //Points to f32[] in shm
-    pub offset_edges: u64,       //Points to u32[] in shm
-    pub offset_rotations: u64,   //Points to f[32] in shm
-    pub offset_scales: u64,      //Points to f[32] in shm
-    pub offset_offsets: u64,     //Points to f[32] in shm
-    pub offset_vert_counts: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
-    pub offset_edge_counts: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
-
-    // --- Totals ---
-    pub object_count: u32,     // Total objects in this group
-    pub surface_context: u32,  // Id for surface context
-
-    pub group_name: [u8; MAX_NAME_LEN], //Human readable name for group
+pub struct AssetPtr {
+    pub meta_data_offset: u64,
     pub mesh_shm_handle: [u8; MAX_HANDLE_LEN], // The single SHM containing ALL data for this group
 }
 
-impl GroupFull {
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct AssetMeta {
+    // --- Offsets into mesh_shm_handle (The "Address Book") ---
+    pub offset_uuids: u64,       //Points to [u8; 16][] in shm
+    pub offset_verts: u64,       //Points to f32[] in shm
+    pub offset_edges: u64,       //Points to u32[] in shm
+    pub offset_vert_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
+    pub offset_edge_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
+    pub offset_transforms: u64, //Points to Transform[] in shm
+    pub offset_object_names: u64, 
+    pub offset_object_name_lengths: u64,
+    pub offset_group_name: u64, //Points to the group name string in shm
+    
+    // --- Totals ---
+    pub object_count: u32,     // Total objects in this group
+    pub group_name_length: u16,
+    pub surface_context: u16,  // Id for surface context
+}
+
+impl AssetMeta {
     pub fn new(
         total_verts: u32,
         total_edges: u32,
         object_count: u32,
-        surface_context: u32,
+        surface_context: u16,
         group_name: &str,
-        shm_handle: &str,
     ) -> (u64, Self) {
         let mut cursor = 0;
 
@@ -92,6 +97,8 @@ impl GroupFull {
         fn align_to_8(val: u64) -> u64 {
             (val + 7) & !7
         }
+        let offset_uuids = cursor;
+        cursor = align_to_8(offset_uuids + (object_count as u64 * 16));
 
         // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
         let offset_verts = cursor;
@@ -101,76 +108,67 @@ impl GroupFull {
         let offset_edges = cursor;
         cursor = align_to_8(offset_edges + (total_edges as u64 * 8));
 
-        // 3. Rotations (Quaternions): [f32; total_objects * 4] -> 16 bytes per object
-        let offset_rotations = cursor;
-        cursor = align_to_8(offset_rotations + (object_count as u64 * 16));
-
-        // 4. Scales: [f32; total_objects * 3] -> 12 bytes per object
-        let offset_scales = cursor;
-        cursor = align_to_8(offset_scales + (object_count as u64 * 12));
-
-        // 5. Offsets (Translations): [f32; total_objects * 3] -> 12 bytes per object
-        let offset_offsets = cursor;
-        cursor = align_to_8(offset_offsets + (object_count as u64 * 12));
+        // 5. Transforms: [f32;  total_objects * 16] -> 64 bytes per object
+        let offset_transforms = cursor;
+        cursor = align_to_8(offset_transforms + (object_count as u64 * 64));
 
         // 6. Vert Counts: [u32; total_objects] -> 4 bytes per object + 1 for total at the end
-        let offset_vert_counts = cursor;
-        cursor = align_to_8(offset_vert_counts + ((object_count + 1) as u64 * 4));
+        let offset_vert_bases = cursor;
+        cursor = align_to_8(offset_vert_bases + ((object_count + 1) as u64 * 4));
 
         // 7. Edge Counts: [u32; total_objects] -> 4 bytes per object +1 for total at the end
-        let offset_edge_counts = cursor;
-        cursor = align_to_8(offset_edge_counts + ((object_count + 1) as u64 * 4));
+        let offset_edge_bases = cursor;
+        cursor = align_to_8(offset_edge_bases + ((object_count + 1) as u64 * 4));
+
+        let offset_object_names = cursor;
+        cursor = align_to_8(offset_object_names + (object_count as u64 * MAX_NAME_LEN as u64));
+
+        let offset_object_name_lengths = cursor;
+        cursor = align_to_8(offset_object_name_lengths + (object_count as u64 * 4));
+
+        let offset_group_name = cursor;
+        cursor = align_to_8(offset_group_name + (group_name.len() as u64));
+
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
 
         // 8. Construct the GroupFull "Blueprint"
-        let mut group_metadata = self::GroupFull {
+        let group_metadata = self::AssetMeta {
+            offset_uuids,
             offset_verts,
             offset_edges,
-            offset_rotations,
-            offset_scales,
-            offset_offsets,
-            offset_vert_counts,
-            offset_edge_counts,
+            offset_vert_bases,
+            offset_edge_bases,
+            offset_transforms,
+            offset_object_names,
+            offset_object_name_lengths,
+            offset_group_name,
+
             object_count,
+            group_name_length: group_name.len() as u16,
             surface_context,
-            group_name: [0; MAX_NAME_LEN],
-            mesh_shm_handle: [0; MAX_HANDLE_LEN],
         };
 
         // Helper to copy strings into fixed u8 arrays
-        group_metadata.set_group_name(group_name);
-        group_metadata.set_shm_handle(shm_handle);
+        // group_metadata.set_group_name(group_name);
 
         (total_size, group_metadata)
     }
 
     // Helpers to safely handle the fixed [u8] arrays
-    fn set_group_name(&mut self, name: &str) {
-        let bytes = name.as_bytes();
-        let len = bytes.len().min(MAX_NAME_LEN - 1);
-        self.group_name[..len].copy_from_slice(&bytes[..len]);
-    }
-
-    fn set_shm_handle(&mut self, handle: &str) {
-        let bytes = handle.as_bytes();
-        let len = bytes.len().min(MAX_HANDLE_LEN - 1);
-        self.mesh_shm_handle[..len].copy_from_slice(&bytes[..len]);
-    }
+    // fn set_group_name(&mut self, name: &str) {
+    //     let bytes = name.as_bytes();
+    //     self.group_name[..bytes.len()].copy_from_slice(&bytes[..bytes.len()]);
+    // }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, ZeroCopySend)]
 pub struct EngineCommand {
-    pub payload_mode: u8, // 0: Inline Data, 1: SHM Handles
-    pub should_cache: u8,
-    pub op_id: u16, // 1: Standardize, 2: GetMeta, 3: Organize, 4: Drop
-
+    pub should_cache: u16,
+    pub op_id: u16,
     pub num_groups: u32,
-
     pub inline_data: [u8; MAX_INLINE_DATA],
-
-    pub shm_fallback_handle: [u8; MAX_HANDLE_LEN],
 }
 
 impl EngineCommand {
