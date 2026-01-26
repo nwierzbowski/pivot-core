@@ -173,8 +173,18 @@ impl AssetMeta {
             &handle_name,
             total_size as usize,
         )?;
-
         group_metadata.write_group_name(&shm, group_name);
+
+        unsafe {
+            // Get the base pointer of the newly created SHM
+            let base_ptr = shm.base_address().as_ptr() as *mut Self;
+            
+            // Write the struct we just built into the very start of the SHM
+            // This makes the SHM "Self-Describing"
+            base_ptr.write(group_metadata.clone());
+        }
+
+        
 
         Ok((shm, group_metadata))
     }
