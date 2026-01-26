@@ -251,3 +251,10 @@ impl EngineCommand {
 pub struct EngineResponse {
     pub status: u32, // 0 for OK, 1 for Error, etc.
 }
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
+pub struct MeshPublish {
+    pub num_groups: u64,
+    pub inline_data: [u8; MAX_INLINE_DATA],
+}
