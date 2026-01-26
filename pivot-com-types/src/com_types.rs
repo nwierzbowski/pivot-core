@@ -240,7 +240,7 @@ impl EngineCommand {
         }
     }
 
-    pub fn get_meta_ptrs(&self) -> Vec<*mut AssetMeta> {
+    pub fn get_meta_ptrs(&self) -> Vec<(SharedMemory, *mut AssetMeta)> {
         get_meta_ptrs(&self.inline_data, self.num_groups as usize)
     }
 }
@@ -259,12 +259,12 @@ pub struct MeshPublish {
 }
 
 impl MeshPublish {
-    pub fn get_meta_ptrs(&self) -> Vec<*mut AssetMeta> {
+    pub fn get_meta_ptrs(&self) -> Vec<( SharedMemory, *mut AssetMeta)> {
         get_meta_ptrs(&self.inline_data, self.num_groups as usize)
     }
 }
 // Common trait to parse `ShmOffset` entries from inline buffers.
-fn get_meta_ptrs(inline_data: &[u8; MAX_INLINE_DATA], num_groups: usize) -> Vec<*mut AssetMeta> {
+fn get_meta_ptrs(inline_data: &[u8; MAX_INLINE_DATA], num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
     let asset_ptrs = unsafe {
         std::slice::from_raw_parts(
             inline_data.as_ptr() as *const ShmOffset,
@@ -299,7 +299,7 @@ fn get_meta_ptrs(inline_data: &[u8; MAX_INLINE_DATA], num_groups: usize) -> Vec<
                 .add(ptr.meta_data_offset as usize) as *mut AssetMeta
         };
 
-        asset_meta_vec.push(meta_ptr);
+        asset_meta_vec.push((shm, meta_ptr));
     }
     asset_meta_vec
 }
