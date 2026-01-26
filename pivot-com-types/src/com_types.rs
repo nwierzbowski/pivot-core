@@ -169,22 +169,17 @@ impl AssetMeta {
             surface_context,
         };
 
-        let shm = group_metadata.create_shm_segment(
-            &handle_name,
-            total_size as usize,
-        )?;
+        let shm = group_metadata.create_shm_segment(&handle_name, total_size as usize)?;
         group_metadata.write_group_name(&shm, group_name);
 
         unsafe {
             // Get the base pointer of the newly created SHM
             let base_ptr = shm.base_address().as_ptr() as *mut Self;
-            
+
             // Write the struct we just built into the very start of the SHM
             // This makes the SHM "Self-Describing"
             base_ptr.write(group_metadata.clone());
         }
-
-        
 
         Ok((shm, group_metadata))
     }
@@ -257,4 +252,71 @@ pub struct EngineResponse {
 pub struct MeshPublish {
     pub num_groups: u64,
     pub inline_data: [u8; MAX_INLINE_DATA],
+}
+// Common trait to parse `ShmOffset` entries from inline buffers.
+pub trait InlineGroupMeta {
+    fn num_groups(&self) -> usize;
+    fn inline_data(&self) -> &[u8];
+
+    fn get_meta_ptrs(&self) -> Vec<*mut AssetMeta> {
+        let asset_ptrs = unsafe {
+            std::slice::from_raw_parts(
+                self.inline_data().as_ptr() as *const ShmOffset,
+                self.num_groups(),
+            )
+        };
+
+        let mut asset_meta_vec = Vec::with_capacity(self.num_groups());
+
+        for ptr in asset_ptrs {
+            let clean_handle_bytes = bytes_to_clean_str(&ptr.mesh_shm_handle);
+
+            let shm_handle = String::from_utf8_lossy(clean_handle_bytes).to_string();
+
+            let file_name = match FileName::new(shm_handle.as_bytes()) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("invalid shared memory name '{}': {:?}", shm_handle, e);
+                    continue;
+                }
+            };
+
+            let shm = {
+                SharedMemoryBuilder::new(&file_name)
+                    .open_existing(AccessMode::ReadWrite)
+                    .expect("Failed to open SHM")
+            };
+
+            let meta_ptr = unsafe {
+                shm.base_address().as_ptr().add(ptr.meta_data_offset as usize) as *mut AssetMeta
+            };
+
+            asset_meta_vec.push(meta_ptr);
+        }
+        asset_meta_vec
+    }
+}
+
+impl InlineGroupMeta for MeshPublish {
+    fn num_groups(&self) -> usize {
+        self.num_groups as usize
+    }
+    fn inline_data(&self) -> &[u8] {
+        &self.inline_data
+    }
+}
+
+impl InlineGroupMeta for EngineCommand {
+    fn num_groups(&self) -> usize {
+        self.num_groups as usize
+    }
+    fn inline_data(&self) -> &[u8] {
+        &self.inline_data
+    }
+}
+
+pub fn bytes_to_clean_str(bytes: &[u8]) -> &[u8] {
+    // Look for the first null terminator, or use the whole slice if none found
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    &bytes[..len]
 }
