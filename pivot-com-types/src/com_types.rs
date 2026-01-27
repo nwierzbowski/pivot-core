@@ -83,8 +83,8 @@ pub struct AssetMeta {
     pub offset_uuids: u64,      //Points to [u8; 16][] in shm
     pub offset_verts: u64,      //Points to f32[] in shm
     pub offset_edges: u64,      //Points to u32[] in shm
-    pub offset_vert_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
-    pub offset_edge_bases: u64, //Points to u32[] in shm index N contains the total and they are stored cumulatively
+    pub offset_vert_bases: u64, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
+    pub offset_edge_bases: u64, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
     pub offset_transforms: u64, //Points to Transform[] in shm
     pub offset_object_names: u64,
     pub offset_object_name_lengths: u64,
@@ -130,13 +130,13 @@ impl AssetMeta {
         let offset_transforms = cursor;
         cursor = align_to_8(offset_transforms + (object_count as u64 * 64));
 
-        // 6. Vert Counts: [u32; total_objects] -> 4 bytes per object
+        // 6. Vert Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_vert_bases = cursor;
-        cursor = align_to_8(offset_vert_bases + (object_count as u64 * 4));
+        cursor = align_to_8(offset_vert_bases + ((object_count as u64 + 1) * 4));
 
-        // 7. Edge Counts: [u32; total_objects] -> 4 bytes per object
+        // 7. Edge Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_edge_bases = cursor;
-        cursor = align_to_8(offset_edge_bases + (object_count as u64 * 4));
+        cursor = align_to_8(offset_edge_bases + ((object_count as u64 + 1) * 4));
 
         let offset_object_names = cursor;
         cursor = align_to_8(offset_object_names + (object_count as u64 * MAX_NAME_LEN as u64));
