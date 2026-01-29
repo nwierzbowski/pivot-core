@@ -16,6 +16,13 @@ pub struct Buffer {
 }
 
 impl Buffer {
+
+    pub fn new() -> Self {
+        Self {
+            data: [0u8; MAX_INLINE_DATA],
+        }
+    }
+
     pub fn copy_payload<T>(&mut self, payload: &[T])
     where
         T: Sized,
