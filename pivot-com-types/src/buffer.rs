@@ -5,7 +5,7 @@ use iceoryx2_bb_posix::{
     shared_memory::{SharedMemory, SharedMemoryBuilder},
 };
 
-use crate::{asset_meta::AssetMeta, asset_ptr::AssetPtr};
+use crate::{asset_meta::AssetMeta, asset_ptr::AssetPtr, asset_surface::GroupSurface};
 
 pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
 
@@ -16,7 +16,6 @@ pub struct Buffer {
 }
 
 impl Buffer {
-
     pub fn new() -> Self {
         Self {
             data: [0u8; MAX_INLINE_DATA],
@@ -68,6 +67,26 @@ impl Buffer {
             asset_meta_vec.push((shm, meta_ptr));
         }
         asset_meta_vec
+    }
+
+    pub fn to_group_surfaces(&self, num_groups: usize) -> &[GroupSurface] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.data.as_ptr() as *const GroupSurface,
+                num_groups as usize,
+            )
+        }
+    }
+
+    pub fn to_group_names(&self, num_groups: usize) -> Vec<String> {
+        let group_surfaces = self.to_group_surfaces(num_groups);
+        group_surfaces
+            .iter()
+            .map(|group| {
+                let clean_name_bytes = bytes_to_clean_str(&group.group_name);
+                String::from_utf8_lossy(clean_name_bytes).to_string()
+            })
+            .collect()
     }
 }
 
