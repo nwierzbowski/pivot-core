@@ -1,0 +1,71 @@
+use bytemuck::{Pod, Zeroable};
+use iceoryx2::prelude::*;
+use iceoryx2_bb_posix::{
+    file::AccessMode,
+    shared_memory::{SharedMemory, SharedMemoryBuilder},
+};
+
+use crate::{asset_meta::AssetMeta, asset_ptr::AssetPtr};
+
+pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, ZeroCopySend)]
+pub struct Buffer {
+    data: [u8; MAX_INLINE_DATA],
+}
+
+impl Buffer {
+    pub fn copy_payload<T>(&mut self, payload: &[T])
+    where
+        T: Sized,
+    {
+        unsafe {
+            let ptr = payload.as_ptr() as *const u8;
+            let t_size = std::mem::size_of::<T>() * payload.len();
+            std::ptr::copy_nonoverlapping(ptr, self.data.as_mut_ptr(), t_size.min(MAX_INLINE_DATA));
+        }
+    }
+
+    pub fn to_asset_meta_ptr(&self, num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
+        let asset_ptrs = unsafe {
+            std::slice::from_raw_parts(self.data.as_ptr() as *const AssetPtr, num_groups)
+        };
+        let mut asset_meta_vec = Vec::with_capacity(num_groups);
+
+        for ptr in asset_ptrs {
+            let clean_handle_bytes = bytes_to_clean_str(&ptr.mesh_shm_handle);
+
+            let shm_handle = String::from_utf8_lossy(clean_handle_bytes).to_string();
+
+            let file_name = match FileName::new(shm_handle.as_bytes()) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("invalid shared memory name '{}': {:?}", shm_handle, e);
+                    continue;
+                }
+            };
+
+            let shm = {
+                SharedMemoryBuilder::new(&file_name)
+                    .open_existing(AccessMode::ReadWrite)
+                    .expect("Failed to open SHM")
+            };
+
+            let meta_ptr = unsafe {
+                shm.base_address()
+                    .as_ptr()
+                    .add(ptr.meta_data_offset as usize) as *mut AssetMeta
+            };
+
+            asset_meta_vec.push((shm, meta_ptr));
+        }
+        asset_meta_vec
+    }
+}
+
+pub fn bytes_to_clean_str(bytes: &[u8]) -> &[u8] {
+    // Look for the first null terminator, or use the whole slice if none found
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    &bytes[..len]
+}
