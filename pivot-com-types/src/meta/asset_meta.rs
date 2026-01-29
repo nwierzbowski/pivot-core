@@ -18,6 +18,9 @@ pub struct AssetMeta {
     pub offset_group_name: u64, //Points to the group name string in shm
 
     // --- Totals ---
+    
+    pub vert_count: u32,
+    pub edge_count: u32,
     pub object_count: u32, // Total objects in this group
     pub group_name_length: u16,
     pub surface_context: u16, // Id for surface context
@@ -87,6 +90,8 @@ impl AssetMeta {
             offset_object_name_lengths,
             offset_group_name,
 
+            vert_count: total_verts,
+            edge_count: total_edges,
             object_count,
             group_name_length: group_name.len() as u16,
             surface_context,
