@@ -1,21 +1,20 @@
 use iceoryx2::prelude::*;
 use iceoryx2_bb_posix::shared_memory::*;
 
-use crate::constants::MAX_NAME_LEN;
+use crate::{constants::MAX_NAME_LEN, fields::{Edge, Matrix4x4, Uuid, Vert}};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AssetMeta {
     // --- Offsets into mesh_shm_handle (The "Address Book") ---
-    pub offset_uuids: u64,      //Points to [u8; 16][] in shm
-    pub offset_verts: u64,      //Points to f32[] in shm
-    pub offset_edges: u64,      //Points to u32[] in shm
-    pub offset_vert_bases: u64, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
-    pub offset_edge_bases: u64, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
-    pub offset_transforms: u64, //Points to Transform[] in shm
-    pub offset_object_names: u64,
-    pub offset_object_name_lengths: u64,
-    pub offset_group_name: u64, //Points to the group name string in shm
+    pub offset_uuids: usize,      //Points to [u8; 16][] in shm
+    pub offset_verts: usize,      //Points to f32[] in shm
+    pub offset_edges: usize,      //Points to u32[] in shm
+    pub offset_vert_bases: usize, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
+    pub offset_edge_bases: usize, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
+    pub offset_transforms: usize, //Points to Transform[] in shm
+    pub offset_object_names: usize,
+    pub offset_group_name: usize, //Points to the group name string in shm
 
     // --- Totals ---
     
@@ -37,43 +36,42 @@ impl AssetMeta {
     ) -> Result<(SharedMemory, Self), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
-        fn align_to_8(val: u64) -> u64 {
+        fn align_to_8(val: usize) -> usize {
             (val + 7) & !7
         }
 
-        let mut cursor = size_of::<Self>() as u64;
+        let count = object_count as usize;
+        
+
+        let mut cursor = size_of::<Self>() as usize;
 
         let offset_uuids = cursor;
-        cursor = align_to_8(offset_uuids + (object_count as u64 * 16));
+        cursor = align_to_8(offset_uuids + (count * size_of::<Uuid>()));
 
         // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
         let offset_verts = cursor;
-        cursor = align_to_8(offset_verts + (total_verts as u64 * 12));
+        cursor = align_to_8(offset_verts + (total_verts as usize * size_of::<Vert>()));
 
         // 2. Edges: [u32; total_edge_count * 2] -> 8 bytes per edge
         let offset_edges = cursor;
-        cursor = align_to_8(offset_edges + (total_edges as u64 * 8));
-
+        cursor = align_to_8(offset_edges + (total_edges as usize * size_of::<Edge>()));
         // 5. Transforms: [f32;  total_objects * 16] -> 64 bytes per object
         let offset_transforms = cursor;
-        cursor = align_to_8(offset_transforms + (object_count as u64 * 64));
+        cursor = align_to_8(offset_transforms + (count * size_of::<Matrix4x4>()));
 
         // 6. Vert Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_vert_bases = cursor;
-        cursor = align_to_8(offset_vert_bases + ((object_count as u64 + 1) * 4));
+        cursor = align_to_8(offset_vert_bases + ((count + 1) * size_of::<u32>()));
 
         // 7. Edge Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_edge_bases = cursor;
-        cursor = align_to_8(offset_edge_bases + ((object_count as u64 + 1) * 4));
+        cursor = align_to_8(offset_edge_bases + ((count + 1) * size_of::<u32>()));
 
         let offset_object_names = cursor;
-        cursor = align_to_8(offset_object_names + (object_count as u64 * MAX_NAME_LEN as u64));
-
-        let offset_object_name_lengths = cursor;
-        cursor = align_to_8(offset_object_name_lengths + (object_count as u64 * 2));
+        cursor = align_to_8(offset_object_names + (count * MAX_NAME_LEN));
 
         let offset_group_name = cursor;
-        cursor = align_to_8(offset_group_name + (group_name.len() as u64));
+        cursor = align_to_8(offset_group_name + (group_name.len()));
 
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
@@ -87,7 +85,6 @@ impl AssetMeta {
             offset_edge_bases,
             offset_transforms,
             offset_object_names,
-            offset_object_name_lengths,
             offset_group_name,
 
             vert_count: total_verts,

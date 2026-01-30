@@ -22,14 +22,14 @@ impl Buffer {
         }
     }
 
-    pub fn copy_payload<T>(&mut self, payload: &[T])
+    pub fn copy_payload<T>(&mut self, payload: &[T], offset: usize)
     where
         T: Sized,
     {
         unsafe {
             let ptr = payload.as_ptr() as *const u8;
             let t_size = std::mem::size_of::<T>() * payload.len();
-            std::ptr::copy_nonoverlapping(ptr, self.data.as_mut_ptr(), t_size.min(MAX_INLINE_DATA));
+            std::ptr::copy_nonoverlapping(ptr, self.data.as_mut_ptr().add(offset), t_size.min(MAX_INLINE_DATA - offset));
         }
     }
 

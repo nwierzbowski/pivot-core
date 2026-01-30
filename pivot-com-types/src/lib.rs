@@ -3,6 +3,7 @@ pub mod inline;
 pub mod meta;
 pub mod constants;
 pub mod buffer;
+pub mod fields;
 
 pub use command::*;
 pub use inline::*;
