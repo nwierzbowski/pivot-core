@@ -1,3 +1,9 @@
+use bytemuck::{Pod, Zeroable};
+
+
+
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Uuid {
     bytes: [u8; 16],
 }

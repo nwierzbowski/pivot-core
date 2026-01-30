@@ -1,7 +1,11 @@
+use bytemuck::{Pod, Zeroable};
+
 #[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct AssetPtr {
     packed_ptr: u64,
 }
+
 
 impl AssetPtr {
     pub fn new(slab_index: u16, offset: u64) -> Self {

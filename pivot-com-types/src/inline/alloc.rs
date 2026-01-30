@@ -1,4 +1,6 @@
-use crate::fields::Uuid;
+use bytemuck::{Pod, Zeroable};
+
+use crate::{MAX_HANDLE_LEN, fields::Uuid};
 
 pub struct AllocRequestMeta {
     pub num_assets: u64,
@@ -28,6 +30,13 @@ impl AllocRequestMeta {
     }
 }
 
+pub struct SlabRegistry {
+    pub num_slabs: u64,
+    pub slab_handles: [[u8; MAX_HANDLE_LEN]; 64],
+}
+
+#[derive(Copy, Clone, Pod, Zeroable)]
+#[repr(C)]
 pub struct AllocResponseMeta {
     pub num_assets: u64,
     pub offset_uuids: usize,

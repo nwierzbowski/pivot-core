@@ -1,11 +1,14 @@
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, Zeroable, cast_slice, from_bytes};
 use iceoryx2::prelude::*;
 use iceoryx2_bb_posix::{
     file::AccessMode,
     shared_memory::{SharedMemory, SharedMemoryBuilder},
 };
 
-use crate::{asset_meta::AssetMeta, asset_ptr::AssetPtr, asset_surface::GroupSurface};
+use crate::{
+    alloc::AllocResponseMeta, asset_meta::AssetMeta, asset_ptr::AssetPtr,
+    asset_surface::GroupSurface, fields::Uuid,
+};
 
 pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
 
@@ -29,8 +32,19 @@ impl Buffer {
         unsafe {
             let ptr = payload.as_ptr() as *const u8;
             let t_size = std::mem::size_of::<T>() * payload.len();
-            std::ptr::copy_nonoverlapping(ptr, self.data.as_mut_ptr().add(offset), t_size.min(MAX_INLINE_DATA - offset));
+            std::ptr::copy_nonoverlapping(
+                ptr,
+                self.data.as_mut_ptr().add(offset),
+                t_size.min(MAX_INLINE_DATA - offset),
+            );
         }
+    }
+
+    pub fn to_alloc_response(&self) -> (Vec<Uuid>, Vec<AssetPtr>) {
+        let resp = from_bytes(&self.data) as &AllocResponseMeta;
+        let ptrs = cast_slice::<u8, AssetPtr>(&self.data[resp.offset_packed_ptrs..resp.offset_packed_ptrs + (resp.num_assets as usize * size_of::<AssetPtr>())]);
+        let uuids = cast_slice::<u8, Uuid>(&self.data[resp.offset_uuids..resp.offset_uuids + (resp.num_assets as usize * size_of::<Uuid>())]);
+        (uuids.to_vec(), ptrs.to_vec())
     }
 
     pub fn to_asset_meta_ptr(&self, num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
