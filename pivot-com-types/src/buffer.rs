@@ -41,7 +41,7 @@ impl Buffer {
     }
 
     pub fn to_alloc_response(&self) -> (Vec<Uuid>, Vec<AssetPtr>) {
-        let resp = from_bytes(&self.data) as &AllocResponseMeta;
+        let resp = from_bytes::<AllocResponseMeta>(&self.data);
         let ptrs = cast_slice::<u8, AssetPtr>(&self.data[resp.offset_packed_ptrs..resp.offset_packed_ptrs + (resp.num_assets as usize * size_of::<AssetPtr>())]);
         let uuids = cast_slice::<u8, Uuid>(&self.data[resp.offset_uuids..resp.offset_uuids + (resp.num_assets as usize * size_of::<Uuid>())]);
         (uuids.to_vec(), ptrs.to_vec())
