@@ -39,33 +39,33 @@ impl Buffer {
         };
         let mut asset_meta_vec = Vec::with_capacity(num_groups);
 
-        for ptr in asset_ptrs {
-            let clean_handle_bytes = bytes_to_clean_str(&ptr.mesh_shm_handle);
+        // for ptr in asset_ptrs {
+        //     let clean_handle_bytes = bytes_to_clean_str(&ptr.mesh_shm_handle);
 
-            let shm_handle = String::from_utf8_lossy(clean_handle_bytes).to_string();
+        //     let shm_handle = String::from_utf8_lossy(clean_handle_bytes).to_string();
 
-            let file_name = match FileName::new(shm_handle.as_bytes()) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!("invalid shared memory name '{}': {:?}", shm_handle, e);
-                    continue;
-                }
-            };
+        //     let file_name = match FileName::new(shm_handle.as_bytes()) {
+        //         Ok(f) => f,
+        //         Err(e) => {
+        //             eprintln!("invalid shared memory name '{}': {:?}", shm_handle, e);
+        //             continue;
+        //         }
+        //     };
 
-            let shm = {
-                SharedMemoryBuilder::new(&file_name)
-                    .open_existing(AccessMode::ReadWrite)
-                    .expect("Failed to open SHM")
-            };
+        //     let shm = {
+        //         SharedMemoryBuilder::new(&file_name)
+        //             .open_existing(AccessMode::ReadWrite)
+        //             .expect("Failed to open SHM")
+        //     };
 
-            let meta_ptr = unsafe {
-                shm.base_address()
-                    .as_ptr()
-                    .add(ptr.meta_data_offset as usize) as *mut AssetMeta
-            };
+        //     let meta_ptr = unsafe {
+        //         shm.base_address()
+        //             .as_ptr()
+        //             .add(ptr.meta_data_offset as usize) as *mut AssetMeta
+        //     };
 
-            asset_meta_vec.push((shm, meta_ptr));
-        }
+        //     asset_meta_vec.push((shm, meta_ptr));
+        // }
         asset_meta_vec
     }
 
