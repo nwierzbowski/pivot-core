@@ -30,6 +30,9 @@ impl AllocRequestMeta {
     }
 }
 
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+
 pub struct SlabRegistry {
     pub num_slabs: u64,
     pub slab_handles: [[u8; MAX_HANDLE_LEN]; 64],
