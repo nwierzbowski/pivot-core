@@ -32,8 +32,8 @@ impl AssetMeta {
         object_count: u32,
         surface_context: u16,
         group_name: &str,
-        handle_name: &str,
-    ) -> Result<(SharedMemory, Self), String> {
+        // handle_name: &str,
+    ) -> Result<(AssetMeta, usize), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
         fn align_to_8(val: usize) -> usize {
@@ -94,19 +94,19 @@ impl AssetMeta {
             surface_context,
         };
 
-        let shm = group_metadata.create_shm_segment(&handle_name, total_size as usize)?;
-        group_metadata.write_group_name(&shm, group_name);
+        // let shm = group_metadata.create_shm_segment(&handle_name, total_size as usize)?;
+        // group_metadata.write_group_name(&shm, group_name);
 
-        unsafe {
-            // Get the base pointer of the newly created SHM
-            let base_ptr = shm.base_address().as_ptr() as *mut Self;
+        // unsafe {
+        //     // Get the base pointer of the newly created SHM
+        //     let base_ptr = shm.base_address().as_ptr() as *mut Self;
 
-            // Write the struct we just built into the very start of the SHM
-            // This makes the SHM "Self-Describing"
-            base_ptr.write(group_metadata.clone());
-        }
+        //     // Write the struct we just built into the very start of the SHM
+        //     // This makes the SHM "Self-Describing"
+        //     base_ptr.write(group_metadata.clone());
+        // }
 
-        Ok((shm, group_metadata))
+        Ok((group_metadata, total_size))
     }
 
     pub fn get_group_name<'a>(&self, shm_base: *const u8) -> &'a str {
