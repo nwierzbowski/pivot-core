@@ -56,7 +56,7 @@ impl Buffer {
         }
     }
 
-    pub fn to_alloc_response(&self) -> (&[Uuid], &[AssetPtr], &[u8]) {
+    pub fn to_alloc_response(&self) -> (&[Uuid], &[AssetPtr]) {
         let resp = unsafe { &*(self.data.as_ptr() as *const AllocResponseMeta) };
         let base_ptr = self.data.as_ptr();
         let num = resp.num_assets as usize;
@@ -69,44 +69,11 @@ impl Buffer {
                 num,
             )
         };
-        let root_handle = &resp.root_slab_handle;
-        (uuids, ptrs, root_handle)
+        (uuids, ptrs)
     }
 
-    pub fn to_asset_meta_ptr(&self, num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
-        let asset_ptrs = unsafe {
-            std::slice::from_raw_parts(self.data.as_ptr() as *const AssetPtr, num_groups)
-        };
-        let mut asset_meta_vec = Vec::with_capacity(num_groups);
-
-        // for ptr in asset_ptrs {
-        //     let clean_handle_bytes = bytes_to_clean_str(&ptr.mesh_shm_handle);
-
-        //     let shm_handle = String::from_utf8_lossy(clean_handle_bytes).to_string();
-
-        //     let file_name = match FileName::new(shm_handle.as_bytes()) {
-        //         Ok(f) => f,
-        //         Err(e) => {
-        //             eprintln!("invalid shared memory name '{}': {:?}", shm_handle, e);
-        //             continue;
-        //         }
-        //     };
-
-        //     let shm = {
-        //         SharedMemoryBuilder::new(&file_name)
-        //             .open_existing(AccessMode::ReadWrite)
-        //             .expect("Failed to open SHM")
-        //     };
-
-        //     let meta_ptr = unsafe {
-        //         shm.base_address()
-        //             .as_ptr()
-        //             .add(ptr.meta_data_offset as usize) as *mut AssetMeta
-        //     };
-
-        //     asset_meta_vec.push((shm, meta_ptr));
-        // }
-        asset_meta_vec
+    pub fn to_asset_meta_ptr(&self, num_groups: usize) -> &[AssetPtr] {
+        unsafe { std::slice::from_raw_parts(self.data.as_ptr() as *const AssetPtr, num_groups) }
     }
 
     pub fn to_group_surfaces(&self, num_groups: usize) -> &[GroupSurface] {
