@@ -22,3 +22,11 @@ pub struct Edge {
 pub struct Matrix4x4 {
     data: [f32; 16],
 }
+
+#[cfg(feature = "pyo3")]
+impl<'py> pyo3::FromPyObject<'py> for Uuid {
+    fn extract_bound(ob: &pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        let bytes: [u8; 16] = ob.extract()?;
+        Ok(Self { bytes })
+    }
+}
