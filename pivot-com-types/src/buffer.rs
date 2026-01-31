@@ -56,7 +56,7 @@ impl Buffer {
         }
     }
 
-    pub fn to_alloc_response(&self) -> (&[Uuid], &[AssetPtr]) {
+    pub fn to_alloc_response(&self) -> (&[Uuid], &[AssetPtr], &[u8]) {
         let resp = unsafe { &*(self.data.as_ptr() as *const AllocResponseMeta) };
         let base_ptr = self.data.as_ptr();
         let num = resp.num_assets as usize;
@@ -69,7 +69,8 @@ impl Buffer {
                 num,
             )
         };
-        (uuids, ptrs)
+        let root_handle = &resp.root_slab_handle;
+        (uuids, ptrs, root_handle)
     }
 
     pub fn to_asset_meta_ptr(&self, num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
