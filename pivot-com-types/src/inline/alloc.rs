@@ -33,7 +33,7 @@ impl AllocRequestMeta {
     }
 }
 
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 #[repr(C)]
 
 pub struct SlabRegistry {
