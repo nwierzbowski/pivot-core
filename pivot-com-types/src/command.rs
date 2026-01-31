@@ -1,6 +1,8 @@
+use std::char::MAX;
+
 use iceoryx2::prelude::*;
 
-use crate::{Buffer};
+use crate::{Buffer, MAX_HANDLE_LEN};
 
 pub const OP_STANDARDIZE_GROUPS: u16 = 1;
 pub const OP_STANDARDIZE_SYNCED_GROUPS: u16 = 2;
@@ -23,16 +25,24 @@ pub struct EngineCommand {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, ZeroCopySend)]
+pub struct ResponseHeader {
+    pub status: u16,
+    pub total_slabs: u16,
+    pub num_items: u32,
+    pub root_slab_handle: [u8; MAX_HANDLE_LEN],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, ZeroCopySend)]
 pub struct EngineResponse {
-    pub status: u32, // 0 for OK, 1 for Error, etc.
-    pub num_headers: u32,
+    pub header: ResponseHeader,
     pub inline_data: Buffer,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, ZeroCopySend)]
 pub struct MeshPublish {
-    pub num_assets: u64,
+    pub header: ResponseHeader,
     pub inline_data: Buffer,
 }
 
