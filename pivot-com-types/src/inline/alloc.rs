@@ -47,12 +47,10 @@ pub struct AllocResponseMeta {
     pub num_assets: u64,
     pub offset_uuids: usize,
     pub offset_packed_ptrs: usize,
-
-    pub root_slab_handle: [u8; MAX_HANDLE_LEN],
 }
 
 impl AllocResponseMeta {
-    pub fn new(num_assets: u64, root_slab_handle: &[u8]) -> Self {
+    pub fn new(num_assets: u64) -> Self {
         let count = num_assets as usize;
 
         let mut cursor = size_of::<Self>();
@@ -64,18 +62,11 @@ impl AllocResponseMeta {
         // cursor = align_to_8(offset_packed_ptrs + (count * size_of::<u64>()));
 
         // let total_size = cursor;
-        let len = root_slab_handle.len().min(MAX_HANDLE_LEN);
-        let handle_slice = &root_slab_handle[..len];
 
         Self {
             num_assets,
             offset_uuids,
             offset_packed_ptrs,
-            root_slab_handle: {
-                let mut handle = [0u8; MAX_HANDLE_LEN];
-                handle[..len].copy_from_slice(handle_slice);
-                handle
-            }
         }
     }
 }

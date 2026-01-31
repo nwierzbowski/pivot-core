@@ -1,5 +1,3 @@
-use std::char::MAX;
-
 use iceoryx2::prelude::*;
 
 use crate::{Buffer, MAX_HANDLE_LEN};
