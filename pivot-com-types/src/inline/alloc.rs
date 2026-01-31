@@ -2,11 +2,14 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{MAX_HANDLE_LEN, fields::Uuid};
 
+#[derive(Copy, Clone, Pod, Zeroable)]
+#[repr(C)]
 pub struct AllocRequestMeta {
     pub num_assets: u64,
     pub offset_uuids: usize,
     pub offset_sizes: usize,
 }
+
 
 impl AllocRequestMeta {
     pub fn new(num_assets: u64) -> Self {

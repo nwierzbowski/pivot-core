@@ -6,7 +6,7 @@ use iceoryx2_bb_posix::{
 };
 
 use crate::{
-    alloc::AllocResponseMeta, asset_meta::AssetMeta, asset_ptr::AssetPtr,
+    alloc::{AllocRequestMeta, AllocResponseMeta}, asset_meta::AssetMeta, asset_ptr::AssetPtr,
     asset_surface::GroupSurface, fields::Uuid,
 };
 
@@ -38,6 +38,10 @@ impl Buffer {
                 t_size.min(MAX_INLINE_DATA - offset),
             );
         }
+    }
+
+    pub fn to_alloc_request(&self) {
+        let req = from_bytes::<AllocRequestMeta>(&self.data);
     }
 
     pub fn to_alloc_response(&self) -> (Vec<Uuid>, Vec<AssetPtr>) {
