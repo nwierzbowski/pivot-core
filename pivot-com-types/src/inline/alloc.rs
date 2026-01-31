@@ -52,7 +52,7 @@ pub struct AllocResponseMeta {
 }
 
 impl AllocResponseMeta {
-    pub fn new(num_assets: u64, root_slab_handle: &str) -> Self {
+    pub fn new(num_assets: u64, root_slab_handle: &[u8]) -> Self {
         let count = num_assets as usize;
 
         let mut cursor = size_of::<Self>();
@@ -65,7 +65,7 @@ impl AllocResponseMeta {
 
         // let total_size = cursor;
         let len = root_slab_handle.len().min(MAX_HANDLE_LEN);
-        let handle_slice = &root_slab_handle.as_bytes()[..len];
+        let handle_slice = &root_slab_handle[..len];
 
         Self {
             num_assets,
