@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct AssetPtr {
     packed_ptr: u64,
@@ -8,8 +8,8 @@ pub struct AssetPtr {
 
 
 impl AssetPtr {
-    pub fn new(slab_index: u16, offset: u64) -> Self {
-        let packed_ptr = ((slab_index as u64) << 48) | (offset & 0x0000_FFFF_FFFF_FFFF);
+    pub fn new(slab_index: u16, offset: usize) -> Self {
+        let packed_ptr = ((slab_index as u64) << 48) | (offset & 0x0000_FFFF_FFFF_FFFF) as u64;
         Self { packed_ptr }
     }
 
