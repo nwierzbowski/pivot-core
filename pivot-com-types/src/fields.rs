@@ -24,8 +24,10 @@ pub struct Matrix4x4 {
 }
 
 #[cfg(feature = "pyo3")]
-impl<'py> pyo3::FromPyObject<'py> for Uuid {
-    fn extract_bound(ob: &pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for Uuid {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> Result<Self, Self::Error> {
         let bytes: [u8; 16] = ob.extract()?;
         Ok(Self { bytes })
     }
