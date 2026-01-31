@@ -6,8 +6,11 @@ use iceoryx2_bb_posix::{
 };
 
 use crate::{
-    alloc::{AllocRequestMeta, AllocResponseMeta}, asset_meta::AssetMeta, asset_ptr::AssetPtr,
-    asset_surface::GroupSurface, fields::Uuid,
+    alloc::{AllocRequestMeta, AllocResponseMeta},
+    asset_meta::AssetMeta,
+    asset_ptr::AssetPtr,
+    asset_surface::GroupSurface,
+    fields::Uuid,
 };
 
 pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
@@ -40,15 +43,33 @@ impl Buffer {
         }
     }
 
-    pub fn to_alloc_request(&self) {
-        let req = from_bytes::<AllocRequestMeta>(&self.data);
+    pub fn to_alloc_request(&self) -> (&[Uuid], &[usize]) {
+        let req = unsafe { &*(self.data.as_ptr() as *const AllocRequestMeta) };
+        let base_ptr = self.data.as_ptr();
+        let num = req.num_assets as usize;
+        unsafe {
+            let uuids =
+                std::slice::from_raw_parts(base_ptr.add(req.offset_uuids) as *const Uuid, num);
+            let sizes =
+                std::slice::from_raw_parts(base_ptr.add(req.offset_sizes) as *const usize, num);
+            (uuids, sizes)
+        }
     }
 
-    pub fn to_alloc_response(&self) -> (Vec<Uuid>, Vec<AssetPtr>) {
-        let resp = from_bytes::<AllocResponseMeta>(&self.data);
-        let ptrs = cast_slice::<u8, AssetPtr>(&self.data[resp.offset_packed_ptrs..resp.offset_packed_ptrs + (resp.num_assets as usize * size_of::<AssetPtr>())]);
-        let uuids = cast_slice::<u8, Uuid>(&self.data[resp.offset_uuids..resp.offset_uuids + (resp.num_assets as usize * size_of::<Uuid>())]);
-        (uuids.to_vec(), ptrs.to_vec())
+    pub fn to_alloc_response(&self) -> (&[Uuid], &[AssetPtr]) {
+        let resp = unsafe { &*(self.data.as_ptr() as *const AllocResponseMeta) };
+        let base_ptr = self.data.as_ptr();
+        let num = resp.num_assets as usize;
+        let uuids = unsafe {
+            std::slice::from_raw_parts(base_ptr.add(resp.offset_uuids) as *const Uuid, num)
+        };
+        let ptrs = unsafe {
+            std::slice::from_raw_parts(
+                base_ptr.add(resp.offset_packed_ptrs) as *const AssetPtr,
+                num,
+            )
+        };
+        (uuids, ptrs)
     }
 
     pub fn to_asset_meta_ptr(&self, num_groups: usize) -> Vec<(SharedMemory, *mut AssetMeta)> {
