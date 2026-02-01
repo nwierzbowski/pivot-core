@@ -3,7 +3,7 @@ use bytemuck::{Pod, Zeroable};
 
 
 #[repr(transparent)]
-#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Hash, Debug)]
 pub struct Uuid {
     bytes: [u8; 16],
 }

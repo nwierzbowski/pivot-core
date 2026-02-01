@@ -23,6 +23,7 @@ pub struct AssetMeta {
     pub object_count: u32, // Total objects in this group
     pub group_name_length: u16,
     pub surface_context: u16, // Id for surface context
+    pub uuid: Uuid,
 }
 
 impl AssetMeta {
