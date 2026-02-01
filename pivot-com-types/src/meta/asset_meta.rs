@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use iceoryx2::prelude::*;
 use iceoryx2_bb_posix::shared_memory::*;
 
@@ -119,25 +121,10 @@ impl AssetMeta {
         }
     }
 
-    fn write_group_name(&self, shm: &SharedMemory, group_name: &str) {
+    pub fn write_group_name(&self, ptr: NonNull<u8>, group_name: &str) {
         unsafe {
-            let base_ptr = shm.base_address().as_ptr() as *mut u8;
-            let ptr = base_ptr.add(self.offset_group_name as usize);
-            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr, group_name.len());
+            let ptr = ptr.add(self.offset_group_name as usize);
+            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr.as_ptr(), group_name.len());
         }
-    }
-
-    fn create_shm_segment(&self, name: &str, size: usize) -> Result<SharedMemory, String> {
-        let file_name = FileName::new(name.as_bytes())
-            .map_err(|e| format!("invalid shared memory name '{}': {:?}", name, e))?;
-
-        SharedMemoryBuilder::new(&file_name)
-            .is_memory_locked(false)
-            .creation_mode(CreationMode::PurgeAndCreate)
-            .size(size)
-            .permission(Permission::OWNER_ALL | Permission::GROUP_ALL)
-            .zero_memory(true)
-            .create()
-            .map_err(|e| format!("failed to create shared memory '{}': {:?}", name, e))
     }
 }
