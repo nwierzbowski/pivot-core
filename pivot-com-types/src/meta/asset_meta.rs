@@ -1,9 +1,12 @@
-use std::ptr::NonNull;
+use std::ptr::{NonNull, addr_of_mut};
 
 use iceoryx2::prelude::*;
 use iceoryx2_bb_posix::shared_memory::*;
 
-use crate::{constants::MAX_NAME_LEN, fields::{Edge, Matrix4x4, Uuid, Vert}};
+use crate::{
+    constants::MAX_NAME_LEN,
+    fields::{Edge, Matrix4x4, Uuid, Vert},
+};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -19,7 +22,6 @@ pub struct AssetMeta {
     pub offset_group_name: usize, //Points to the group name string in shm
 
     // --- Totals ---
-    
     pub vert_count: u32,
     pub edge_count: u32,
     pub object_count: u32, // Total objects in this group
@@ -44,7 +46,6 @@ impl AssetMeta {
         }
 
         let count = object_count as usize;
-        
 
         let mut cursor = size_of::<Self>() as usize;
 
@@ -121,10 +122,11 @@ impl AssetMeta {
         }
     }
 
-    pub fn write_group_name(&self, ptr: NonNull<u8>, group_name: &str) {
+    pub fn write_group_name(&mut self, group_name: &str) {
         unsafe {
-            let ptr = ptr.add(self.offset_group_name as usize);
-            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr.as_ptr(), group_name.len());
+            let ptr = addr_of_mut!(*self).add(self.offset_group_name as usize) as *mut u8;
+
+            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr, group_name.len());
         }
     }
 }
