@@ -39,10 +39,10 @@ impl AssetMeta {
         group_name: &str,
         uuid: Uuid,
     ) -> Result<(AssetMeta, usize), String> {
-        // Helper to align the cursor to the next 8-byte boundary
-        // This is a bitwise trick: (x + 7) & !7
-        fn align_to_8(val: usize) -> usize {
-            (val + 7) & !7
+        // Helper to align the cursor to the next 32-byte boundary
+        // Required for AVX SIMD stability and performance.
+        fn align_to_32(val: usize) -> usize {
+            (val + 31) & !31
         }
 
         let count = object_count as usize;
@@ -50,32 +50,32 @@ impl AssetMeta {
         let mut cursor = size_of::<Self>() as usize;
 
         let offset_uuids = cursor;
-        cursor = align_to_8(offset_uuids + (count * size_of::<Uuid>()));
+        cursor = align_to_32(offset_uuids + (count * size_of::<Uuid>()));
 
         // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
         let offset_verts = cursor;
-        cursor = align_to_8(offset_verts + (total_verts as usize * size_of::<Vert>()));
+        cursor = align_to_32(offset_verts + (total_verts as usize * size_of::<Vert>()));
 
         // 2. Edges: [u32; total_edge_count * 2] -> 8 bytes per edge
         let offset_edges = cursor;
-        cursor = align_to_8(offset_edges + (total_edges as usize * size_of::<Edge>()));
+        cursor = align_to_32(offset_edges + (total_edges as usize * size_of::<Edge>()));
         // 5. Transforms: [f32;  total_objects * 16] -> 64 bytes per object
         let offset_transforms = cursor;
-        cursor = align_to_8(offset_transforms + (count * size_of::<Matrix4x4>()));
+        cursor = align_to_32(offset_transforms + (count * size_of::<Matrix4x4>()));
 
         // 6. Vert Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_vert_bases = cursor;
-        cursor = align_to_8(offset_vert_bases + ((count + 1) * size_of::<u32>()));
+        cursor = align_to_32(offset_vert_bases + ((count + 1) * size_of::<u32>()));
 
         // 7. Edge Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_edge_bases = cursor;
-        cursor = align_to_8(offset_edge_bases + ((count + 1) * size_of::<u32>()));
+        cursor = align_to_32(offset_edge_bases + ((count + 1) * size_of::<u32>()));
 
         let offset_object_names = cursor;
-        cursor = align_to_8(offset_object_names + (count * MAX_NAME_LEN));
+        cursor = align_to_32(offset_object_names + (count * MAX_NAME_LEN));
 
         let offset_group_name = cursor;
-        cursor = align_to_8(offset_group_name + (group_name.len()));
+        cursor = align_to_32(offset_group_name + (group_name.len()));
 
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;

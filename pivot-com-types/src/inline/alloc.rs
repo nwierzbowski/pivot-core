@@ -11,6 +11,10 @@ pub struct AllocRequestMeta {
 }
 
 
+fn align_to_32(val: usize) -> usize {
+    (val + 31) & !31
+}
+
 impl AllocRequestMeta {
     pub fn new(num_assets: u64) -> Self {
         let count = num_assets as usize;
@@ -18,10 +22,10 @@ impl AllocRequestMeta {
         let mut cursor = size_of::<Self>();
 
         let offset_uuids = cursor;
-        cursor = align_to_8(offset_uuids + (count * size_of::<Uuid>()));
+        cursor = align_to_32(offset_uuids + (count * size_of::<Uuid>()));
 
         let offset_sizes = cursor;
-        // cursor = align_to_8(offset_sizes + (count * size_of::<usize>()));
+        // cursor = align_to_32(offset_sizes + (count * size_of::<usize>()));
 
         // let total_size = cursor;
 
@@ -56,10 +60,10 @@ impl AllocResponseMeta {
         let mut cursor = size_of::<Self>();
 
         let offset_uuids = cursor;
-        cursor = align_to_8(offset_uuids + (count * size_of::<Uuid>()));
+        cursor = align_to_32(offset_uuids + (count * size_of::<Uuid>()));
 
         let offset_packed_ptrs = cursor;
-        // cursor = align_to_8(offset_packed_ptrs + (count * size_of::<u64>()));
+        // cursor = align_to_32(offset_packed_ptrs + (count * size_of::<u64>()));
 
         // let total_size = cursor;
 
@@ -69,8 +73,4 @@ impl AllocResponseMeta {
             offset_packed_ptrs,
         }
     }
-}
-
-fn align_to_8(val: usize) -> usize {
-    (val + 7) & !7
 }
