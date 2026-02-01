@@ -33,7 +33,7 @@ impl AssetMeta {
         object_count: u32,
         surface_context: u16,
         group_name: &str,
-        // handle_name: &str,
+        uuid: Uuid,
     ) -> Result<(AssetMeta, usize), String> {
         // Helper to align the cursor to the next 8-byte boundary
         // This is a bitwise trick: (x + 7) & !7
@@ -93,6 +93,7 @@ impl AssetMeta {
             object_count,
             group_name_length: group_name.len() as u16,
             surface_context,
+            uuid,
         };
 
         // let shm = group_metadata.create_shm_segment(&handle_name, total_size as usize)?;
