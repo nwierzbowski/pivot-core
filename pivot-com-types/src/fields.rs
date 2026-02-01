@@ -1,9 +1,10 @@
 use bytemuck::{Pod, Zeroable};
+use iceoryx2::prelude::ZeroCopySend;
 
 
 
-#[repr(transparent)]
-#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Hash, Debug)]
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Hash, Debug, ZeroCopySend)]
 pub struct Uuid {
     bytes: [u8; 16],
 }
