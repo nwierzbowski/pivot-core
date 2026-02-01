@@ -1,12 +1,8 @@
-use bytemuck::{Pod, Zeroable, cast_slice, from_bytes};
+use bytemuck::{Pod, Zeroable};
 use iceoryx2::prelude::*;
-use iceoryx2_bb_posix::{
-    file::AccessMode,
-    shared_memory::{SharedMemory, SharedMemoryBuilder},
-};
 
 use crate::{
-    alloc::{AllocRequestMeta, AllocResponseMeta}, asset_meta::AssetMeta, asset_names::GroupNames, asset_ptr::AssetPtr, asset_surface::GroupSurface, fields::Uuid
+    alloc::{AllocRequestMeta, AllocResponseMeta}, asset_ptr::AssetPtr, asset_surface::GroupSurface, fields::Uuid
 };
 
 pub const MAX_INLINE_DATA: usize = 65536; // 64 KB (L1 Cache Friendly)
@@ -81,9 +77,9 @@ impl Buffer {
         }
     }
 
-    pub fn to_group_names(&self, num_groups: usize) ->&[GroupNames] {
+    pub fn to_uuids(&self, num_groups: usize) ->&[Uuid] {
         unsafe {
-            std::slice::from_raw_parts(self.data.as_ptr() as *const GroupNames, num_groups as usize)
+            std::slice::from_raw_parts(self.data.as_ptr() as *const Uuid, num_groups as usize)
         }
     }
 }
