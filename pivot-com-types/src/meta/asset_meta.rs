@@ -1,8 +1,5 @@
 use std::ptr::{NonNull, addr_of_mut};
 
-use iceoryx2::prelude::*;
-use iceoryx2_bb_posix::shared_memory::*;
-
 use crate::{
     constants::MAX_NAME_LEN,
     fields::{Edge, Matrix4x4, Uuid, Vert},
@@ -124,9 +121,18 @@ impl AssetMeta {
 
     pub fn write_group_name(&mut self, group_name: &str) {
         unsafe {
-            let ptr = addr_of_mut!(*self).add(self.offset_group_name as usize) as *mut u8;
+            // 1. Get the base address of THIS struct instance in SHM
+            let base_ptr = self as *mut Self as *mut u8;
+            
+            // 2. Jump forward by the offset stored IN the struct
+            let dest_ptr = base_ptr.add(self.offset_group_name as usize);
 
-            std::ptr::copy_nonoverlapping(group_name.as_ptr(), ptr, group_name.len());
+            // 3. Perform the raw copy
+            std::ptr::copy_nonoverlapping(
+                group_name.as_ptr(),
+                dest_ptr,
+                group_name.len(),
+            );
         }
     }
 }
