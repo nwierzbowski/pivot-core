@@ -10,6 +10,7 @@ pub const OP_ORGANIZE_OBJECTS: u16 = 5;
 pub const OP_GET_SURFACE_TYPES: u16 = 6;
 pub const OP_STOP_ENGINE: u16 = 7;
 pub const OP_ALLOC_MEM: u16 = 8;
+pub const OP_EXTRACT_GEOMETRIC_FEATURES: u16 = 9;
 
 
 #[repr(C)]
