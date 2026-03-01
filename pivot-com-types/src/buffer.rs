@@ -84,8 +84,8 @@ impl Buffer {
     }
 }
 
-pub fn bytes_to_clean_str(bytes: &[u8]) -> &[u8] {
-    // Look for the first null terminator, or use the whole slice if none found
-    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-    &bytes[..len]
-}
+// pub fn bytes_to_clean_str(bytes: &[u8]) -> &[u8] {
+//     // Look for the first null terminator, or use the whole slice if none found
+//     let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+//     &bytes[..len]
+// }

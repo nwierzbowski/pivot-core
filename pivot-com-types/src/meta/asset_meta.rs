@@ -1,9 +1,9 @@
-use std::ptr::{NonNull, addr_of_mut};
-
 use crate::{
     constants::MAX_NAME_LEN,
-    fields::{Edge, Matrix4x4, Uuid, Vert},
+    fields::{Uuid},
 };
+
+
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -47,29 +47,29 @@ impl AssetMeta {
         let mut cursor = size_of::<Self>() as usize;
 
         let offset_uuids = cursor;
-        cursor = align_to_32(offset_uuids + (count * size_of::<Uuid>()));
+        cursor = align_to_32(offset_uuids + uuids_byte_size(count));
 
         // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
         let offset_verts = cursor;
-        cursor = align_to_32(offset_verts + (total_verts as usize * size_of::<Vert>()));
+        cursor = align_to_32(offset_verts + verts_byte_size(total_verts));
 
         // 2. Edges: [u32; total_edge_count * 2] -> 8 bytes per edge
         let offset_edges = cursor;
-        cursor = align_to_32(offset_edges + (total_edges as usize * size_of::<Edge>()));
+        cursor = align_to_32(offset_edges + edges_byte_size(total_edges));
         // 5. Transforms: [f32;  total_objects * 16] -> 64 bytes per object
         let offset_transforms = cursor;
-        cursor = align_to_32(offset_transforms + (count * size_of::<Matrix4x4>()));
+        cursor = align_to_32(offset_transforms + transforms_byte_size(count));
 
         // 6. Vert Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_vert_bases = cursor;
-        cursor = align_to_32(offset_vert_bases + ((count + 1) * size_of::<u32>()));
+        cursor = align_to_32(offset_vert_bases + vert_counts_byte_size(count));
 
         // 7. Edge Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_edge_bases = cursor;
-        cursor = align_to_32(offset_edge_bases + ((count + 1) * size_of::<u32>()));
+        cursor = align_to_32(offset_edge_bases + edge_counts_byte_size(count));
 
         let offset_object_names = cursor;
-        cursor = align_to_32(offset_object_names + (count * MAX_NAME_LEN));
+        cursor = align_to_32(offset_object_names + object_names_byte_size(count));
 
         let offset_group_name = cursor;
         cursor = align_to_32(offset_group_name + (group_name.len()));
@@ -96,18 +96,6 @@ impl AssetMeta {
             uuid,
         };
 
-        // let shm = group_metadata.create_shm_segment(&handle_name, total_size as usize)?;
-        // group_metadata.write_group_name(&shm, group_name);
-
-        // unsafe {
-        //     // Get the base pointer of the newly created SHM
-        //     let base_ptr = shm.base_address().as_ptr() as *mut Self;
-
-        //     // Write the struct we just built into the very start of the SHM
-        //     // This makes the SHM "Self-Describing"
-        //     base_ptr.write(group_metadata.clone());
-        // }
-
         Ok((group_metadata, total_size))
     }
 
@@ -123,7 +111,7 @@ impl AssetMeta {
         unsafe {
             // 1. Get the base address of THIS struct instance in SHM
             let base_ptr = self as *mut Self as *mut u8;
-            
+
             // 2. Jump forward by the offset stored IN the struct
             let dest_ptr = base_ptr.add(self.offset_group_name as usize);
 
@@ -135,4 +123,64 @@ impl AssetMeta {
             );
         }
     }
+
+    /// Byte size of each data section
+    pub fn verts_byte_size(&self) -> usize {
+        verts_byte_size(self.vert_count)
+    }
+
+    pub fn edges_byte_size(&self) -> usize {
+        edges_byte_size(self.edge_count)
+    }
+
+    pub fn transforms_byte_size(&self) -> usize {
+        transforms_byte_size(self.object_count as usize)
+    }
+
+    pub fn vert_counts_byte_size(&self) -> usize {
+        vert_counts_byte_size(self.object_count as usize)
+    }
+
+    pub fn edge_counts_byte_size(&self) -> usize {
+        edge_counts_byte_size(self.object_count as usize)
+    }
+
+    pub fn object_names_byte_size(&self) -> usize {
+        object_names_byte_size(self.object_count as usize)
+    }
+
+    pub fn uuids_byte_size(&self) -> usize {
+        uuids_byte_size(self.object_count as usize)
+    }
+
+    
+}
+
+// Private helper functions for calculating byte sizes
+fn verts_byte_size(total_verts: u32) -> usize {
+    total_verts as usize * (3 * size_of::<f32>())
+}
+
+fn edges_byte_size(total_edges: u32) -> usize {
+    total_edges as usize * (2 * size_of::<u32>())
+}
+
+fn transforms_byte_size(object_count: usize) -> usize {
+    object_count * (16 * size_of::<f32>())
+}
+
+fn vert_counts_byte_size(object_count: usize) -> usize {
+    (object_count + 1) * size_of::<u32>()
+}
+
+fn edge_counts_byte_size(object_count: usize) -> usize {
+    (object_count + 1) * size_of::<u32>()
+}
+
+fn object_names_byte_size(object_count: usize) -> usize {
+    object_count * MAX_NAME_LEN
+}
+
+fn uuids_byte_size(object_count: usize) -> usize {
+    object_count * size_of::<Uuid>()
 }
