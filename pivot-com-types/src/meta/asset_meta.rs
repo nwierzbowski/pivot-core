@@ -1,17 +1,32 @@
-use crate::{
-    constants::MAX_NAME_LEN,
-    fields::{Uuid},
-};
+use crate::{constants::MAX_NAME_LEN, fields::Uuid};
 
-
+/// Tuple type for asset data slices: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names)
+pub type AssetDataSlices = (
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+    *mut [u8],
+);
 
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AssetMeta {
     // --- Offsets into mesh_shm_handle (The "Address Book") ---
-    pub offset_uuids: usize,      //Points to [u8; 16][] in shm
-    pub offset_verts: usize,      //Points to f32[] in shm
-    pub offset_edges: usize,      //Points to u32[] in shm
+    pub offset_uuids: usize, //Points to [u8; 16][] in shm
+    pub offset_verts: usize, //Points to f32[] in shm
+    pub offset_edges: usize, //Points to u32[] in shm
+    ///Entry per face corner, stores vert index
+    pub offset_loops: usize,
+    ///Entry per face, stores each face first index into loops with total at entry n
+    pub offset_loop_bases: usize,
+    ///Entry per object, stores index into loop lengths with total at entry n
+    pub offset_object_loop_counts: usize,
     pub offset_vert_bases: usize, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
     pub offset_edge_bases: usize, //Points to u32[] in shm (length = object_count + 1) stored cumulatively with final total
     pub offset_transforms: usize, //Points to Transform[] in shm
@@ -21,6 +36,8 @@ pub struct AssetMeta {
     // --- Totals ---
     pub vert_count: u32,
     pub edge_count: u32,
+    pub loop_count: u32,
+    pub total_loop_lengths: u32,
     pub object_count: u32, // Total objects in this group
     pub group_name_length: u16,
     pub surface_context: u16, // Id for surface context
@@ -31,6 +48,8 @@ impl AssetMeta {
     pub fn new(
         total_verts: u32,
         total_edges: u32,
+        total_loops: u32,
+        total_loop_lengths: u32,
         object_count: u32,
         surface_context: u16,
         group_name: &str,
@@ -42,12 +61,10 @@ impl AssetMeta {
             (val + 31) & !31
         }
 
-        let count = object_count as usize;
-
         let mut cursor = size_of::<Self>() as usize;
 
         let offset_uuids = cursor;
-        cursor = align_to_32(offset_uuids + uuids_byte_size(count));
+        cursor = align_to_32(offset_uuids + uuids_byte_size(object_count));
 
         // 1. Vertices: [f32; total_verts * 3] -> 12 bytes per vertex
         let offset_verts = cursor;
@@ -56,20 +73,31 @@ impl AssetMeta {
         // 2. Edges: [u32; total_edge_count * 2] -> 8 bytes per edge
         let offset_edges = cursor;
         cursor = align_to_32(offset_edges + edges_byte_size(total_edges));
+
+        let offset_loop_bases = cursor;
+        cursor = align_to_32(offset_loop_bases + loop_bases_byte_size(total_loops));
+
+        let offset_loops = cursor;
+        cursor = align_to_32(offset_loops + loops_byte_size(total_loop_lengths));
+
+        let offset_object_loop_counts = cursor;
+        cursor =
+            align_to_32(offset_object_loop_counts + object_loop_counts_byte_size(object_count));
+
         // 5. Transforms: [f32;  total_objects * 16] -> 64 bytes per object
         let offset_transforms = cursor;
-        cursor = align_to_32(offset_transforms + transforms_byte_size(count));
+        cursor = align_to_32(offset_transforms + transforms_byte_size(object_count));
 
         // 6. Vert Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_vert_bases = cursor;
-        cursor = align_to_32(offset_vert_bases + vert_counts_byte_size(count));
+        cursor = align_to_32(offset_vert_bases + vert_counts_byte_size(object_count));
 
         // 7. Edge Bases: [u32; total_objects + 1] -> 4 bytes per entry (cumulative with final total)
         let offset_edge_bases = cursor;
-        cursor = align_to_32(offset_edge_bases + edge_counts_byte_size(count));
+        cursor = align_to_32(offset_edge_bases + edge_counts_byte_size(object_count));
 
         let offset_object_names = cursor;
-        cursor = align_to_32(offset_object_names + object_names_byte_size(count));
+        cursor = align_to_32(offset_object_names + object_names_byte_size(object_count));
 
         let offset_group_name = cursor;
         cursor = align_to_32(offset_group_name + (group_name.len()));
@@ -82,6 +110,9 @@ impl AssetMeta {
             offset_uuids,
             offset_verts,
             offset_edges,
+            offset_loop_bases,
+            offset_loops,
+            offset_object_loop_counts,
             offset_vert_bases,
             offset_edge_bases,
             offset_transforms,
@@ -90,6 +121,8 @@ impl AssetMeta {
 
             vert_count: total_verts,
             edge_count: total_edges,
+            loop_count: total_loops,
+            total_loop_lengths,
             object_count,
             group_name_length: group_name.len() as u16,
             surface_context,
@@ -116,44 +149,74 @@ impl AssetMeta {
             let dest_ptr = base_ptr.add(self.offset_group_name as usize);
 
             // 3. Perform the raw copy
-            std::ptr::copy_nonoverlapping(
-                group_name.as_ptr(),
-                dest_ptr,
-                group_name.len(),
-            );
+            std::ptr::copy_nonoverlapping(group_name.as_ptr(), dest_ptr, group_name.len());
         }
     }
 
-    /// Byte size of each data section
-    pub fn verts_byte_size(&self) -> usize {
-        verts_byte_size(self.vert_count)
-    }
+    /// Returns all asset data slices as a tuple.
+    /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names)
+    pub fn get_slices(
+        &mut self,
+    ) -> (
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+        *mut [u8],
+    ) {
+        let base_ptr = self as *mut Self as *mut u8;
+        use std::slice::from_raw_parts_mut;
 
-    pub fn edges_byte_size(&self) -> usize {
-        edges_byte_size(self.edge_count)
+        unsafe {
+            (
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_uuids),
+                    uuids_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_verts),
+                    verts_byte_size(self.vert_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_edges),
+                    edges_byte_size(self.edge_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_loops),
+                    loops_byte_size(self.total_loop_lengths),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_loop_bases),
+                    loop_bases_byte_size(self.loop_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_object_loop_counts),
+                    object_loop_counts_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_transforms),
+                    transforms_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_vert_bases),
+                    vert_counts_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_edge_bases),
+                    edge_counts_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_object_names),
+                    object_names_byte_size(self.object_count),
+                ),
+            )
+        }
     }
-
-    pub fn transforms_byte_size(&self) -> usize {
-        transforms_byte_size(self.object_count as usize)
-    }
-
-    pub fn vert_counts_byte_size(&self) -> usize {
-        vert_counts_byte_size(self.object_count as usize)
-    }
-
-    pub fn edge_counts_byte_size(&self) -> usize {
-        edge_counts_byte_size(self.object_count as usize)
-    }
-
-    pub fn object_names_byte_size(&self) -> usize {
-        object_names_byte_size(self.object_count as usize)
-    }
-
-    pub fn uuids_byte_size(&self) -> usize {
-        uuids_byte_size(self.object_count as usize)
-    }
-
-    
 }
 
 // Private helper functions for calculating byte sizes
@@ -165,22 +228,34 @@ fn edges_byte_size(total_edges: u32) -> usize {
     total_edges as usize * (2 * size_of::<u32>())
 }
 
-fn transforms_byte_size(object_count: usize) -> usize {
-    object_count * (16 * size_of::<f32>())
+fn object_loop_counts_byte_size(object_count: u32) -> usize {
+    (object_count + 1) as usize * size_of::<u32>()
 }
 
-fn vert_counts_byte_size(object_count: usize) -> usize {
-    (object_count + 1) * size_of::<u32>()
+fn loop_bases_byte_size(total_loops: u32) -> usize {
+    total_loops as usize * size_of::<u32>()
 }
 
-fn edge_counts_byte_size(object_count: usize) -> usize {
-    (object_count + 1) * size_of::<u32>()
+fn loops_byte_size(total_loop_lengths: u32) -> usize {
+    total_loop_lengths as usize * (size_of::<u32>())
 }
 
-fn object_names_byte_size(object_count: usize) -> usize {
-    object_count * MAX_NAME_LEN
+fn transforms_byte_size(object_count: u32) -> usize {
+    object_count as usize * (16 * size_of::<f32>())
 }
 
-fn uuids_byte_size(object_count: usize) -> usize {
-    object_count * size_of::<Uuid>()
+fn vert_counts_byte_size(object_count: u32) -> usize {
+    (object_count + 1) as usize * size_of::<u32>()
+}
+
+fn edge_counts_byte_size(object_count: u32) -> usize {
+    (object_count + 1) as usize * size_of::<u32>()
+}
+
+fn object_names_byte_size(object_count: u32) -> usize {
+    object_count as usize * MAX_NAME_LEN
+}
+
+fn uuids_byte_size(object_count: u32) -> usize {
+    object_count as usize * size_of::<Uuid>()
 }
