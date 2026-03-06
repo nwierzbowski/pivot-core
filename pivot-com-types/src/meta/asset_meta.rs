@@ -132,27 +132,6 @@ impl AssetMeta {
         Ok((group_metadata, total_size))
     }
 
-    pub fn get_group_name<'a>(&self, shm_base: *const u8) -> &'a str {
-        unsafe {
-            let ptr = shm_base.add(self.offset_group_name as usize);
-            let slice = std::slice::from_raw_parts(ptr, self.group_name_length as usize);
-            std::str::from_utf8_unchecked(slice)
-        }
-    }
-
-    pub fn write_group_name(&mut self, group_name: &str) {
-        unsafe {
-            // 1. Get the base address of THIS struct instance in SHM
-            let base_ptr = self as *mut Self as *mut u8;
-
-            // 2. Jump forward by the offset stored IN the struct
-            let dest_ptr = base_ptr.add(self.offset_group_name as usize);
-
-            // 3. Perform the raw copy
-            std::ptr::copy_nonoverlapping(group_name.as_ptr(), dest_ptr, group_name.len());
-        }
-    }
-
     /// Returns all asset data slices as a tuple.
     /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names)
     pub fn get_slices(
