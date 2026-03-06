@@ -6,7 +6,7 @@ use iceoryx2::prelude::ZeroCopySend;
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Hash, Debug, ZeroCopySend)]
 pub struct Uuid {
-    bytes: [u8; 16],
+    pub bytes: [u8; 16],
 }
 
 #[cfg(feature = "pyo3")]
