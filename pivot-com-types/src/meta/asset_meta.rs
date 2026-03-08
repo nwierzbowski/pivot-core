@@ -14,6 +14,17 @@ pub type AssetDataSlices = (
     *mut [u8],
 );
 
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct Bounds3f {
+    pub min_x: f32,
+    pub min_z: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    pub min_y: f32,
+    pub max_z: f32,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AssetMeta {
@@ -42,6 +53,8 @@ pub struct AssetMeta {
     pub group_name_length: u16,
     pub surface_context: u16, // Id for surface context
     pub uuid: Uuid,
+
+    pub bounds: Bounds3f,
 }
 
 impl AssetMeta {
@@ -127,6 +140,14 @@ impl AssetMeta {
             group_name_length: group_name.len() as u16,
             surface_context,
             uuid,
+            bounds: Bounds3f {
+                min_x: 0f32,
+                min_y: 0f32,
+                min_z: 0f32,
+                max_x: 0f32,
+                max_y: 0f32,
+                max_z: 0f32,
+            },
         };
 
         Ok((group_metadata, total_size))
