@@ -11,6 +11,7 @@ pub const OP_GET_SURFACE_TYPES: u16 = 6;
 pub const OP_STOP_ENGINE: u16 = 7;
 pub const OP_ALLOC_MEM: u16 = 8;
 pub const OP_EXTRACT_GEOMETRIC_FEATURES: u16 = 9;
+pub const OP_SEND_MESH: u16 = 10;
 
 
 #[repr(C)]
