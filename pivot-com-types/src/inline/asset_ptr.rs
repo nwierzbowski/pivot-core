@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 
 #[repr(transparent)]
-#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq)]
+#[derive(Copy, Clone, Pod, Zeroable, PartialEq, Eq, Debug)]
 pub struct AssetPtr {
     packed_ptr: u64,
 }
