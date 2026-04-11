@@ -12,6 +12,9 @@ pub const OP_STOP_ENGINE: u16 = 7;
 pub const OP_ALLOC_MEM: u16 = 8;
 pub const OP_EXTRACT_GEOMETRIC_FEATURES: u16 = 9;
 pub const OP_SEND_MESH: u16 = 10;
+pub const OP_EXPORT_ASSETS: u16 = 11;
+pub const OP_IMPORT_ASSETS: u16 = 12;
+pub const OP_EXPORT_ALL: u16 = 13;
 
 
 #[repr(C)]

@@ -82,6 +82,74 @@ impl Buffer {
             std::slice::from_raw_parts(self.data.as_ptr() as *const Uuid, num_groups as usize)
         }
     }
+
+    /// Export request: [null-terminated path][4-byte target_bytes][AssetPtrs...]
+    pub fn to_export_params(&self) -> (&str, u32) {
+        let data = &self.data;
+        let path_end = data.iter().position(|&b| b == 0).unwrap_or(MAX_INLINE_DATA);
+        let path = unsafe { std::str::from_utf8_unchecked(&data[..path_end]) };
+        let target_bytes = unsafe {
+            std::slice::from_raw_parts(
+                data.as_ptr().add(path_end + 1) as *const u32,
+                1
+            )[0]
+        };
+        (path, target_bytes)
+    }
+
+    /// Extracts AssetPtrs starting after path+target_bytes
+    pub fn to_export_ptrs(&self, num_ptrs: usize) -> &[AssetPtr] {
+        let data = &self.data;
+        let path_end = data.iter().position(|&b| b == 0).unwrap_or(MAX_INLINE_DATA);
+        let ptr_start = path_end + 1 + 4; // null + target_bytes
+        unsafe {
+            std::slice::from_raw_parts(
+                data.as_ptr().add(ptr_start) as *const AssetPtr,
+                num_ptrs
+            )
+        }
+    }
+
+    /// Import request: [null-terminated path][null-terminated path]...
+    pub fn to_import_paths(&self, num_paths: usize) -> Vec<&str> {
+        let mut paths = Vec::with_capacity(num_paths);
+        let mut offset = 0;
+        let data = &self.data;
+        
+        for _ in 0..num_paths {
+            if offset >= MAX_INLINE_DATA { break; }
+            let path_end = data[offset..].iter().position(|&b| b == 0)
+                .unwrap_or(MAX_INLINE_DATA - offset);
+            if path_end == 0 { break; }
+            let path = unsafe { std::str::from_utf8_unchecked(&data[offset..offset+path_end]) };
+            paths.push(path);
+            offset += path_end + 1;
+        }
+        paths
+    }
+
+    /// Export response: [4-byte filename_count][null-terminated filename]...
+    pub fn to_export_response(&self) -> Vec<&str> {
+        let data = &self.data;
+        let mut count_buf = [0u8; 4];
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), count_buf.as_mut_ptr(), 4);
+        }
+        let count = u32::from_le_bytes(count_buf);
+        let mut filenames = Vec::with_capacity(count as usize);
+        let mut offset = 4;
+        
+        for _ in 0..count {
+            if offset >= MAX_INLINE_DATA { break; }
+            let end = data[offset..].iter().position(|&b| b == 0)
+                .unwrap_or(MAX_INLINE_DATA - offset);
+            if end == 0 { break; }
+            let name = unsafe { std::str::from_utf8_unchecked(&data[offset..offset+end]) };
+            filenames.push(name);
+            offset += end + 1;
+        }
+        filenames
+    }
 }
 
 // pub fn bytes_to_clean_str(bytes: &[u8]) -> &[u8] {
