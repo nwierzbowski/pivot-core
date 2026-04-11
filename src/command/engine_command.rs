@@ -209,19 +209,19 @@ impl EngineCommand {
 
     // --- 11. export_assets --------------------------------------------------
 
-    pub fn export_assets(path: &str, target_bytes: u32, ptrs: &[AssetPtr]) -> Self {
+    pub fn export_assets(path: &str, target_bytes: u32, uuids: &[Uuid]) -> Self {
         let path_len = path.len() + 1; // null terminator
         let aligned_after_path = Buffer::align_up(path_len, 4);
         let after_target = aligned_after_path + 4;
-        let aligned_ptr_start = Buffer::align_up(after_target, std::mem::size_of::<AssetPtr>());
-        let ptr_size = ptrs.len() * std::mem::size_of::<AssetPtr>();
-        let total = aligned_ptr_start + ptr_size;
+        let aligned_uuid_start = Buffer::align_up(after_target, std::mem::size_of::<Uuid>());
+        let uuid_size = uuids.len() * std::mem::size_of::<Uuid>();
+        let total = aligned_uuid_start + uuid_size;
         if total > crate::MAX_INLINE_DATA {
             panic!("export_assets: data exceeds buffer capacity");
         }
         let mut cmd = Self::default();
         cmd.op_id = OP_EXPORT_ASSETS;
-        cmd.num_headers = ptrs.len() as u32;
+        cmd.num_headers = uuids.len() as u32;
         cmd.should_cache = 0;
         unsafe {
             let base = cmd.inline_data.as_mut_ptr();
@@ -229,15 +229,15 @@ impl EngineCommand {
             *base.add(path_len - 1) = 0;
             *(base.add(aligned_after_path) as *mut u32) = target_bytes;
             std::ptr::copy_nonoverlapping(
-                ptrs.as_ptr() as *const u8,
-                base.add(aligned_ptr_start),
-                ptr_size,
+                uuids.as_ptr() as *const u8,
+                base.add(aligned_uuid_start),
+                uuid_size,
             );
         }
         cmd
     }
 
-    pub fn read_export_assets(&self) -> Result<(&str, u32, &[AssetPtr]), BufferError> {
+    pub fn read_export_assets(&self) -> Result<(&str, u32, &[Uuid]), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -255,14 +255,14 @@ impl EngineCommand {
                 .try_into()
                 .map_err(|_| BufferError::Corrupted)?,
         );
-        let ptr_start = Buffer::align_up(aligned_offset + 4, std::mem::size_of::<AssetPtr>());
-        let ptrs = unsafe {
+        let uuid_start = Buffer::align_up(aligned_offset + 4, std::mem::size_of::<Uuid>());
+        let uuids = unsafe {
             std::slice::from_raw_parts(
-                self.inline_data.as_ptr().add(ptr_start) as *const AssetPtr,
+                self.inline_data.as_ptr().add(uuid_start) as *const Uuid,
                 self.num_headers as usize,
             )
         };
-        Ok((path, target_bytes, ptrs))
+        Ok((path, target_bytes, uuids))
     }
 
     // --- 12. export_all -----------------------------------------------------

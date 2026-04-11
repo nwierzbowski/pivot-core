@@ -137,13 +137,13 @@ fn test_alloc_request_mismatch_panics() {
 
 #[test]
 fn test_export_assets_roundtrip() {
-    let ptrs = [AssetPtr::new(0, 100), AssetPtr::new(1, 200)];
-    let cmd = EngineCommand::export_assets("/tmp/export", 1_048_576, &ptrs);
+    let uuids = [make_uuid(1), make_uuid(2)];
+    let cmd = EngineCommand::export_assets("/tmp/export", 1_048_576, &uuids);
     assert_eq!(cmd.op_id, OP_EXPORT_ASSETS);
-    let (path, target, read_ptrss) = cmd.read_export_assets().unwrap();
+    let (path, target, read_uuids) = cmd.read_export_assets().unwrap();
     assert_eq!(path, "/tmp/export");
     assert_eq!(target, 1_048_576);
-    assert_eq!(read_ptrss, &ptrs);
+    assert_eq!(read_uuids, &uuids);
 }
 
 #[test]
