@@ -36,6 +36,7 @@ pub const OP_SEND_MESH: u16 = 10;
 pub const OP_EXPORT_ASSETS: u16 = 11;
 pub const OP_IMPORT_ASSETS: u16 = 12;
 pub const OP_EXPORT_ALL: u16 = 13;
+pub const OP_EXPORT_TBO: u16 = 14;
 
 // ============================================================================
 // Wire types
