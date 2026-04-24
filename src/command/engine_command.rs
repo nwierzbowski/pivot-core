@@ -418,4 +418,67 @@ impl EngineCommand {
         };
         Ok((path, target_bytes, flags, uuids))
     }
+
+    // --- 15. drop_all_groups ------------------------------------------------
+
+    pub fn drop_all_groups() -> Self {
+        let mut cmd = Self::default();
+        cmd.op_id = OP_DROP_ALL_GROUPS;
+        cmd
+    }
+
+    pub fn read_drop_all_groups(&self) {
+        // No inline data
+    }
+
+    // --- 16. export_all_tbo -------------------------------------------------
+
+    pub fn export_all_tbo(path: &str, target_bytes: u64, flags: u32) -> Self {
+        let path_len = path.len() + 1; // null terminator
+        let aligned_after_path = Buffer::align_up(path_len, 8);
+        let after_target = aligned_after_path + 8;
+        let flags_offset = after_target;
+        let total = flags_offset + 4;
+        if total > crate::MAX_INLINE_DATA {
+            panic!("export_all_tbo: data exceeds buffer capacity");
+        }
+        let mut cmd = Self::default();
+        cmd.op_id = OP_EXPORT_ALL_TBO;
+        cmd.should_cache = 0;
+        unsafe {
+            let base = cmd.inline_data.as_mut_ptr();
+            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
+            *base.add(path_len - 1) = 0;
+            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
+            *(base.add(flags_offset) as *mut u32) = flags;
+        }
+        cmd
+    }
+
+    pub fn read_export_all_tbo(&self) -> Result<(&str, u64, u32), BufferError> {
+        let path_end = self
+            .inline_data
+            .as_ref()
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or(BufferError::Corrupted)?;
+        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
+            .map_err(|_| BufferError::InvalidUtf8)?;
+        let aligned_offset = Buffer::align_up(path_end + 1, 8);
+        if aligned_offset + 8 > crate::MAX_INLINE_DATA {
+            return Err(BufferError::Corrupted);
+        }
+        let target_bytes = u64::from_le_bytes(
+            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
+                .try_into()
+                .map_err(|_| BufferError::Corrupted)?,
+        );
+        let flags_offset = aligned_offset + 8;
+        let flags = u32::from_le_bytes(
+            self.inline_data.as_ref()[flags_offset..flags_offset + 4]
+                .try_into()
+                .map_err(|_| BufferError::Corrupted)?,
+        );
+        Ok((path, target_bytes, flags))
+    }
 }

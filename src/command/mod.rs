@@ -37,6 +37,8 @@ pub const OP_EXPORT_ASSETS: u16 = 11;
 pub const OP_IMPORT_ASSETS: u16 = 12;
 pub const OP_EXPORT_ALL: u16 = 13;
 pub const OP_EXPORT_TBO: u16 = 14;
+pub const OP_DROP_ALL_GROUPS: u16 = 15;
+pub const OP_EXPORT_ALL_TBO: u16 = 16;
 
 // ============================================================================
 // Wire types
