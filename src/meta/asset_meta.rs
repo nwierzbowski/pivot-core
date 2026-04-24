@@ -233,7 +233,7 @@ fn object_loop_counts_byte_size(object_count: u32) -> usize {
 }
 
 fn loop_bases_byte_size(total_loops: u32) -> usize {
-    total_loops as usize * size_of::<u32>()
+    (total_loops + 1) as usize * size_of::<u32>()
 }
 
 fn loops_byte_size(total_loop_lengths: u32) -> usize {
