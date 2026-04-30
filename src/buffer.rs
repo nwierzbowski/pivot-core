@@ -147,7 +147,7 @@ mod tests {
     use super::*;
 
     fn make_uuid(id: u8) -> Uuid {
-        let mut bytes = [0u8; 16];
+        let mut bytes = [0u8; Uuid::SIZE];
         bytes[0] = id;
         Uuid { bytes }
     }
