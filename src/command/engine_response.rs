@@ -247,4 +247,36 @@ impl EngineResponse {
     pub fn read_import_assets(&self) -> u16 {
         self.header.status
     }
+
+    // --- 14. tbo_config -----------------------------------------------------
+
+    pub fn tbo_config() -> Self {
+        Self::default()
+    }
+
+    pub fn read_tbo_config(&self) -> u16 {
+        self.header.status
+    }
+
+    // --- 15. tbo_downsample -------------------------------------------------
+
+    pub fn tbo_downsample(accumulated_count: u32) -> Self {
+        let mut resp = Self::default();
+        resp.header.num_items = accumulated_count;
+        resp
+    }
+
+    pub fn read_tbo_downsample(&self) -> u32 {
+        self.header.num_items
+    }
+
+    // --- 16. tbo_flush ------------------------------------------------------
+
+    pub fn tbo_flush(filenames: &[&str]) -> Self {
+        Self::export_assets(filenames)
+    }
+
+    pub fn read_tbo_flush(&self) -> Result<Vec<&str>, BufferError> {
+        self.read_export_assets()
+    }
 }

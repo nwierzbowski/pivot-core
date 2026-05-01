@@ -39,6 +39,9 @@ pub const OP_EXPORT_ALL: u16 = 13;
 pub const OP_EXPORT_TBO: u16 = 14;
 pub const OP_DROP_ALL_GROUPS: u16 = 15;
 pub const OP_EXPORT_ALL_TBO: u16 = 16;
+pub const OP_TBO_CONFIG: u16 = 17;
+pub const OP_TBO_DOWNSAMPLE: u16 = 18;
+pub const OP_TBO_FLUSH: u16 = 19;
 
 // ============================================================================
 // Wire types
