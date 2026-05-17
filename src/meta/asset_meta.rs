@@ -1,7 +1,8 @@
 use crate::{constants::MAX_NAME_LEN, fields::Uuid};
 
-/// Tuple type for asset data slices: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names)
+/// Tuple type for asset data slices: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings)
 pub type AssetDataSlices = (
+    *mut [u8],
     *mut [u8],
     *mut [u8],
     *mut [u8],
@@ -43,6 +44,7 @@ pub struct AssetMeta {
     pub offset_transforms: usize, //Points to Transform[] in shm
     pub offset_object_names: usize,
     pub offset_group_name: usize, //Points to the group name string in shm
+    pub offset_embeddings: usize, // Points to f32[256] in shm
 
     // --- Totals ---
     pub vert_count: u32,
@@ -115,6 +117,10 @@ impl AssetMeta {
         let offset_group_name = cursor;
         cursor = align_to_32(offset_group_name + (group_name.len()));
 
+        // Embeddings: [f32; 256 * object_count] = 1024 * object_count bytes
+        let offset_embeddings = cursor;
+        cursor = align_to_32(offset_embeddings + object_count as usize * 256 * size_of::<f32>());
+
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
 
@@ -131,6 +137,7 @@ impl AssetMeta {
             offset_transforms,
             offset_object_names,
             offset_group_name,
+            offset_embeddings,
 
             vert_count: total_verts,
             edge_count: total_edges,
@@ -154,10 +161,11 @@ impl AssetMeta {
     }
 
     /// Returns all asset data slices as a tuple.
-    /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names)
+    /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings)
     pub fn get_slices(
         &mut self,
     ) -> (
+        *mut [u8],
         *mut [u8],
         *mut [u8],
         *mut [u8],
@@ -213,6 +221,10 @@ impl AssetMeta {
                 from_raw_parts_mut(
                     base_ptr.add(self.offset_object_names),
                     object_names_byte_size(self.object_count),
+                ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_embeddings),
+                    self.object_count as usize * 256 * size_of::<f32>(),
                 ),
             )
         }

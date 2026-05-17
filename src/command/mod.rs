@@ -36,12 +36,14 @@ pub const OP_SEND_MESH: u16 = 10;
 pub const OP_EXPORT_ASSETS: u16 = 11;
 pub const OP_IMPORT_ASSETS: u16 = 12;
 pub const OP_EXPORT_ALL: u16 = 13;
-pub const OP_EXPORT_TBO: u16 = 14;
+pub const OP_EXPORT_MESH_TBO: u16 = 14;
 pub const OP_DROP_ALL_GROUPS: u16 = 15;
 pub const OP_EXPORT_ALL_TBO: u16 = 16;
 pub const OP_TBO_CONFIG: u16 = 17;
 pub const OP_TBO_DOWNSAMPLE: u16 = 18;
 pub const OP_TBO_FLUSH: u16 = 19;
+pub const OP_EXPORT_ASSET_TBO: u16 = 20;
+pub const OP_EXPORT_ALL_ASSET_TBO: u16 = 21;
 
 // ============================================================================
 // Wire types
