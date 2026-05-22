@@ -1,7 +1,8 @@
 use crate::{constants::MAX_NAME_LEN, fields::Uuid};
 
-/// Tuple type for asset data slices: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings)
+/// Tuple type for asset data slices: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings, canonical_transform)
 pub type AssetDataSlices = (
+    *mut [u8],
     *mut [u8],
     *mut [u8],
     *mut [u8],
@@ -45,6 +46,7 @@ pub struct AssetMeta {
     pub offset_object_names: usize,
     pub offset_group_name: usize, //Points to the group name string in shm
     pub offset_embeddings: usize, // Points to f32[256] in shm
+    pub offset_canonical_transform: usize, // Points to f32[16] in shm
 
     // --- Totals ---
     pub vert_count: u32,
@@ -121,6 +123,10 @@ impl AssetMeta {
         let offset_embeddings = cursor;
         cursor = align_to_32(offset_embeddings + object_count as usize * 256 * size_of::<f32>());
 
+        // Canonical transform: [f32; 16] = 64 bytes
+        let offset_canonical_transform = cursor;
+        cursor = align_to_32(offset_canonical_transform + 16 * size_of::<f32>());
+
         // The final cursor value is the total bytes needed for the SHM segment
         let total_size = cursor;
 
@@ -138,6 +144,7 @@ impl AssetMeta {
             offset_object_names,
             offset_group_name,
             offset_embeddings,
+            offset_canonical_transform,
 
             vert_count: total_verts,
             edge_count: total_edges,
@@ -161,10 +168,11 @@ impl AssetMeta {
     }
 
     /// Returns all asset data slices as a tuple.
-    /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings)
+    /// The order is: (obj_uuids, verts, edges, loops, loop_bases, object_loop_counts, transforms, vert_counts, edge_counts, object_names, embeddings, canonical_transform)
     pub fn get_slices(
         &self,
     ) -> (
+        *mut [u8],
         *mut [u8],
         *mut [u8],
         *mut [u8],
@@ -223,9 +231,13 @@ impl AssetMeta {
                     object_names_byte_size(self.object_count),
                 ),
                 from_raw_parts_mut(
-                     base_ptr.add(self.offset_embeddings),
-                     self.object_count as usize * 256 * size_of::<f32>(),
-                 ),
+                      base_ptr.add(self.offset_embeddings),
+                      self.object_count as usize * 256 * size_of::<f32>(),
+                  ),
+                from_raw_parts_mut(
+                    base_ptr.add(self.offset_canonical_transform),
+                    16 * size_of::<f32>(),
+                ),
              )
          }
      }
@@ -289,6 +301,7 @@ impl AssetMeta {
                     src_uuids, src_verts, src_edges, src_loops,
                     src_loop_bases, src_object_loop_counts, src_transforms,
                     src_vert_bases, src_edge_bases, src_names, src_embeddings,
+                    src_canonical_transform,
                 ) = src_meta.get_slices();
 
                 let dest_base_ptr = dest_base as *mut u8;
@@ -372,7 +385,7 @@ impl AssetMeta {
                 );
                 dest_offset = (dest_offset + names_size + 31) & !31;
 
-                // Embeddings
+               // Embeddings
                 let emb_size = src_meta.object_count as usize * 256 * size_of::<f32>();
                 std::ptr::copy_nonoverlapping(
                     src_embeddings as *const [u8] as *const u8,
@@ -380,6 +393,16 @@ impl AssetMeta {
                     emb_size,
                 );
                 dest_offset = (dest_offset + emb_size + 31) & !31;
+
+                // Canonical transform (from first source only)
+                if sources.iter().position(|&(m, _)| m == src_meta_ptr as usize).unwrap() == 0 {
+                    let canon_size = 16 * size_of::<f32>();
+                    std::ptr::copy_nonoverlapping(
+                        src_canonical_transform as *const [u8] as *const u8,
+                        dest_base_ptr.add(dest_offset),
+                        canon_size,
+                    );
+                }
             }
 
             // Update AssetMeta fields
