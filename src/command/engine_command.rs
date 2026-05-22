@@ -714,4 +714,16 @@ impl EngineCommand {
         );
         Ok((path, target_bytes, batch_offset))
     }
+
+    // --- 22. group_all_objects ----------------------------------------------
+
+    pub fn group_all_objects() -> Self {
+        let mut cmd = Self::default();
+        cmd.op_id = OP_GROUP_ALL_OBJECTS;
+        cmd
+    }
+
+    pub fn read_group_all_objects(&self) {
+        // No inline data
+    }
 }

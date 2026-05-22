@@ -44,6 +44,7 @@ pub const OP_TBO_DOWNSAMPLE: u16 = 18;
 pub const OP_TBO_FLUSH: u16 = 19;
 pub const OP_EXPORT_ASSET_TBO: u16 = 20;
 pub const OP_EXPORT_ALL_ASSET_TBO: u16 = 21;
+pub const OP_GROUP_ALL_OBJECTS: u16 = 22;
 
 // ============================================================================
 // Wire types
