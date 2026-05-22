@@ -726,4 +726,17 @@ impl EngineCommand {
     pub fn read_group_all_objects(&self) {
         // No inline data
     }
+
+    // --- 23. embed_all_assets -----------------------------------------------
+
+    pub fn embed_all_assets(should_cache: u16) -> Self {
+        let mut cmd = Self::default();
+        cmd.op_id = OP_EMBED_ALL_ASSETS;
+        cmd.should_cache = should_cache;
+        cmd
+    }
+
+    pub fn read_embed_all_assets(&self) {
+        // No inline data
+    }
 }
