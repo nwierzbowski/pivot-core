@@ -296,9 +296,10 @@ impl AssetMeta {
             surface_context, &group_name, uuid,
         )?;
 
-        // 3. Copy data from sources
+  // 3. Copy data from sources
         unsafe {
-            let dest_meta = &mut *(dest_base as *mut AssetMeta);
+            // Write the fully-initialized AssetMeta header to the top of the shared memory block
+            std::ptr::write(dest_base as *mut AssetMeta, new_meta.clone());
 
             // Track cumulative offsets for adjustments
             let mut cum_loop_bases_offset = 0u32;
@@ -426,14 +427,6 @@ impl AssetMeta {
                     dest_offset = (dest_offset + emb_size + 31) & !31;
                 }
             }
-
-            // Update AssetMeta fields
-            dest_meta.vert_count = total_verts;
-            dest_meta.edge_count = total_edges;
-            dest_meta.loop_count = total_loops;
-            dest_meta.total_loop_lengths = total_loop_lengths;
-            dest_meta.object_count = object_count;
-            dest_meta.group_name_length = group_name.len() as u16;
 
             Ok((new_meta, total_size))
         }
