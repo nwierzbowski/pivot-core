@@ -258,12 +258,12 @@ impl AssetMeta {
     ///
     /// # Arguments
     /// * `dest_base` - Pointer to pre-allocated destination buffer
-    /// * `sources` - Slice of (meta_ptr, base_ptr) tuples for each source asset
+    /// * `sources` - Slice of metadata pointers for each source asset
     ///
     /// Returns the new AssetMeta and total size.
     pub fn merge_assets(
         dest_base: *mut u8,
-        sources: &[(usize, usize)],  // (meta_ptr, base_ptr) pairs
+        sources: &[usize],
     ) -> Result<(AssetMeta, usize), String> {
         use std::mem::size_of;
 
@@ -277,7 +277,7 @@ impl AssetMeta {
         let mut uuid = Uuid { bytes: [0u8; 32] };
         let mut group_name = String::new();
 
-        for &(meta_ptr, _base_ptr) in sources {
+        for &meta_ptr in sources {
             let meta = unsafe { &*(meta_ptr as *const AssetMeta) };
             total_verts += meta.vert_count;
             total_edges += meta.edge_count;
@@ -296,136 +296,203 @@ impl AssetMeta {
             surface_context, &group_name, uuid,
         )?;
 
-  // 3. Copy data from sources
+  // 3. Copy data from sources — per-field concatenation
         unsafe {
             // Write the fully-initialized AssetMeta header to the top of the shared memory block
             std::ptr::write(dest_base as *mut AssetMeta, new_meta.clone());
 
-            // Track cumulative offsets for adjustments
-            let mut cum_loop_bases_offset = 0u32;
-            let mut cum_object_loop_counts_offset = 0u32;
+            let dest = dest_base as *mut u8;
 
-            // Copy each data type from sources to destination
-            for &(src_meta_ptr, src_base) in sources.iter() {
-                let src_meta = &*(src_meta_ptr as *const AssetMeta);
-
-                // Get source slices (returns *mut [u8] pointers)
-                let (
-                    src_uuids, src_verts, src_edges, src_loops,
-                    src_loop_bases, src_object_loop_counts, src_transforms,
-                    src_vert_bases, src_edge_bases, src_names, src_embeddings,
-                    src_canonical_transform, src_asset_embedding,
-                ) = src_meta.get_slices();
-
-                let dest_base_ptr = dest_base as *mut u8;
-
-                // Calculate destination offset for this source's data
-                let mut dest_offset = 0usize;
-
-                // Object UUIDs
-                let uuid_size = uuids_byte_size(src_meta.object_count);
-                std::ptr::copy_nonoverlapping(
-                    src_uuids as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    uuid_size,
-                );
-                dest_offset = (dest_offset + uuid_size + 31) & !31;
-
-                // Vertices
-                let vert_size = verts_byte_size(src_meta.vert_count);
-                std::ptr::copy_nonoverlapping(
-                    src_verts as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    vert_size,
-                );
-                dest_offset = (dest_offset + vert_size + 31) & !31;
-
-                // Edges
-                let edge_size = edges_byte_size(src_meta.edge_count);
-                std::ptr::copy_nonoverlapping(
-                    src_edges as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    edge_size,
-                );
-                dest_offset = (dest_offset + edge_size + 31) & !31;
-
-                // Loop bases (with cumulative offset adjustment)
-                let loop_bases_size = loop_bases_byte_size(src_meta.loop_count);
-                let src_lb_ptr = src_loop_bases as *const [u8] as *const u32;
-                let dst_lb_ptr = dest_base_ptr.add(dest_offset) as *mut u32;
-                for i in 0..=src_meta.loop_count {
-                    let val = src_lb_ptr.add(i as usize).read();
-                    dst_lb_ptr.add(i as usize).write(val + cum_loop_bases_offset);
+            // --- Object UUIDs (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_uuids;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (src_uuids, ..) = src_meta.get_slices();
+                    let size = uuids_byte_size(src_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_uuids as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
                 }
-                dest_offset = (dest_offset + loop_bases_size + 31) & !31;
-                cum_loop_bases_offset += src_meta.loop_count;
+            }
 
-                // Loops
-                let loops_size = loops_byte_size(src_meta.total_loop_lengths);
-                std::ptr::copy_nonoverlapping(
-                    src_loops as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    loops_size,
-                );
-                dest_offset = (dest_offset + loops_size + 31) & !31;
-
-                // Object loop counts (with cumulative offset adjustment)
-                let oolc_size = object_loop_counts_byte_size(src_meta.object_count);
-                let src_oolc_ptr = src_object_loop_counts as *const [u8] as *const u32;
-                let dst_oolc_ptr = dest_base_ptr.add(dest_offset) as *mut u32;
-                for i in 0..=src_meta.object_count {
-                    let val = src_oolc_ptr.add(i as usize).read();
-                    dst_oolc_ptr.add(i as usize).write(val + cum_object_loop_counts_offset);
+            // --- Vertices (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_verts;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, src_verts, ..) = src_meta.get_slices();
+                    let size = verts_byte_size(src_meta.vert_count);
+                    std::ptr::copy_nonoverlapping(src_verts as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
                 }
-                dest_offset = (dest_offset + oolc_size + 31) & !31;
-                cum_object_loop_counts_offset += src_meta.object_count;
+            }
 
-                // Transforms
-                let trans_size = transforms_byte_size(src_meta.object_count);
-                std::ptr::copy_nonoverlapping(
-                    src_transforms as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    trans_size,
-                );
-                dest_offset = (dest_offset + trans_size + 31) & !31;
-
-                // Object names
-                let names_size = object_names_byte_size(src_meta.object_count);
-                std::ptr::copy_nonoverlapping(
-                    src_names as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    names_size,
-                );
-                dest_offset = (dest_offset + names_size + 31) & !31;
-
-               // Embeddings
-                let emb_size = src_meta.object_count as usize * 256 * size_of::<f32>();
-                std::ptr::copy_nonoverlapping(
-                    src_embeddings as *const [u8] as *const u8,
-                    dest_base_ptr.add(dest_offset),
-                    emb_size,
-                );
-                dest_offset = (dest_offset + emb_size + 31) & !31;
-
-                // Canonical transform (from first source only)
-                if sources.iter().position(|&(m, _)| m == src_meta_ptr as usize).unwrap() == 0 {
-                    let canon_size = 16 * size_of::<f32>();
-                    std::ptr::copy_nonoverlapping(
-                        src_canonical_transform as *const [u8] as *const u8,
-                        dest_base_ptr.add(dest_offset),
-                        canon_size,
-                    );
-                    dest_offset = (dest_offset + canon_size + 31) & !31;
-
-                    // Asset embedding (from first source only)
-                    let emb_size = 256 * size_of::<f32>();
-                    std::ptr::copy_nonoverlapping(
-                        src_asset_embedding as *const [u8] as *const u8,
-                        dest_base_ptr.add(dest_offset),
-                        emb_size,
-                    );
-                    dest_offset = (dest_offset + emb_size + 31) & !31;
+            // --- Edges (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_edges;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, src_edges, ..) = src_meta.get_slices();
+                    let size = edges_byte_size(src_meta.edge_count);
+                    std::ptr::copy_nonoverlapping(src_edges as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
                 }
+            }
+
+            // --- Loop bases (cumulative index adjustment) ---
+            {
+                let mut cursor = new_meta.offset_loop_bases;
+                let mut cum_offset = 0u32;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, src_loop_bases, ..) = src_meta.get_slices();
+                    let size = loop_bases_byte_size(src_meta.loop_count);
+                    let src_ptr = src_loop_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=src_meta.loop_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += src_meta.loop_count;
+                }
+            }
+
+            // --- Loops (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_loops;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, src_loops, ..) = src_meta.get_slices();
+                    let size = loops_byte_size(src_meta.total_loop_lengths);
+                    std::ptr::copy_nonoverlapping(src_loops as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+            }
+
+            // --- Object loop counts (cumulative index adjustment) ---
+            {
+                let mut cursor = new_meta.offset_object_loop_counts;
+                let mut cum_offset = 0u32;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, src_object_loop_counts, ..) = src_meta.get_slices();
+                    let size = object_loop_counts_byte_size(src_meta.object_count);
+                    let src_ptr = src_object_loop_counts as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=src_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += src_meta.object_count;
+                }
+            }
+
+            // --- Transforms (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_transforms;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, _, src_transforms, ..) = src_meta.get_slices();
+                    let size = transforms_byte_size(src_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_transforms as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+            }
+
+            // --- Vert bases (cumulative index adjustment) ---
+            {
+                let mut cursor = new_meta.offset_vert_bases;
+                let mut cum_offset = 0u32;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, _, _, src_vert_bases, ..) = src_meta.get_slices();
+                    let size = vert_counts_byte_size(src_meta.object_count);
+                    let src_ptr = src_vert_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=src_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += src_meta.vert_count;
+                }
+            }
+
+            // --- Edge bases (cumulative index adjustment) ---
+            {
+                let mut cursor = new_meta.offset_edge_bases;
+                let mut cum_offset = 0u32;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, _, _, _, src_edge_bases, ..) = src_meta.get_slices();
+                    let size = edge_counts_byte_size(src_meta.object_count);
+                    let src_ptr = src_edge_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=src_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += src_meta.edge_count;
+                }
+            }
+
+            // --- Object names (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_object_names;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, _, _, _, _, src_names, ..) = src_meta.get_slices();
+                    let size = object_names_byte_size(src_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_names as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+            }
+
+            // --- Group name (first source only) ---
+            {
+                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let group_name = first_src_meta.get_group_name();
+                let size = group_name.len();
+                std::ptr::copy_nonoverlapping(
+                    group_name.as_ptr(),
+                    dest.add(new_meta.offset_group_name),
+                    size,
+                );
+            }
+
+            // --- Embeddings (plain copy) ---
+            {
+                let mut cursor = new_meta.offset_embeddings;
+                for &src_meta_ptr in sources {
+                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                    let (_, _, _, _, _, _, _, _, _, _, src_embeddings, ..) = src_meta.get_slices();
+                    let size = src_meta.object_count as usize * 256 * size_of::<f32>();
+                    std::ptr::copy_nonoverlapping(src_embeddings as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+            }
+
+            // --- Canonical transform (first source only) ---
+            {
+                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let (_, _, _, _, _, _, _, _, _, _, _, src_canonical_transform, _) = first_src_meta.get_slices();
+                let size = 16 * size_of::<f32>();
+                std::ptr::copy_nonoverlapping(
+                    src_canonical_transform as *const u8,
+                    dest.add(new_meta.offset_canonical_transform),
+                    size,
+                );
+            }
+
+            // --- Asset embedding (first source only) ---
+            {
+                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let (_, _, _, _, _, _, _, _, _, _, _, _, src_asset_embedding) = first_src_meta.get_slices();
+                let size = 256 * size_of::<f32>();
+                std::ptr::copy_nonoverlapping(
+                    src_asset_embedding as *const u8,
+                    dest.add(new_meta.offset_asset_embedding),
+                    size,
+                );
             }
 
             Ok((new_meta, total_size))
