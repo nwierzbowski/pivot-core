@@ -279,6 +279,17 @@ impl AssetMeta {
         let mut group_name = String::new();
 
         let anchor_meta = unsafe { &*(anchor_meta_ptr as *const AssetMeta) };
+
+        // Add anchor's counts to totals
+        total_verts += anchor_meta.vert_count;
+        total_edges += anchor_meta.edge_count;
+        total_loops += anchor_meta.loop_count;
+        total_loop_lengths += anchor_meta.total_loop_lengths;
+        object_count += anchor_meta.object_count;
+        surface_context = anchor_meta.surface_context;
+        uuid = anchor_meta.uuid;
+        group_name = anchor_meta.get_group_name();
+
         for &ptr in member_meta_ptrs {
             let meta = unsafe { &*(ptr as *const AssetMeta) };
             total_verts += meta.vert_count;
