@@ -258,12 +258,13 @@ impl AssetMeta {
     ///
     /// # Arguments
     /// * `dest_base` - Pointer to pre-allocated destination buffer
-    /// * `sources` - Slice of metadata pointers for each source asset
+    /// * `sources` - Metadata pointer for the anchor asset and member assets
     ///
     /// Returns the new AssetMeta and total size.
     pub fn merge_assets(
         dest_base: *mut u8,
-        sources: &[usize],
+        anchor_meta_ptr: usize,
+        member_meta_ptrs: &[usize],
     ) -> Result<(AssetMeta, usize), String> {
         use std::mem::size_of;
 
@@ -277,8 +278,9 @@ impl AssetMeta {
         let mut uuid = Uuid { bytes: [0u8; 32] };
         let mut group_name = String::new();
 
-        for &meta_ptr in sources {
-            let meta = unsafe { &*(meta_ptr as *const AssetMeta) };
+        let anchor_meta = unsafe { &*(anchor_meta_ptr as *const AssetMeta) };
+        for &ptr in member_meta_ptrs {
+            let meta = unsafe { &*(ptr as *const AssetMeta) };
             total_verts += meta.vert_count;
             total_edges += meta.edge_count;
             total_loops += meta.loop_count;
@@ -306,8 +308,14 @@ impl AssetMeta {
             // --- Object UUIDs (plain copy) ---
             {
                 let mut cursor = new_meta.offset_uuids;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (src_uuids, ..) = anchor_meta.get_slices();
+                    let size = uuids_byte_size(anchor_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_uuids as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (src_uuids, ..) = src_meta.get_slices();
                     let size = uuids_byte_size(src_meta.object_count);
                     std::ptr::copy_nonoverlapping(src_uuids as *const u8, dest.add(cursor), size);
@@ -318,8 +326,14 @@ impl AssetMeta {
             // --- Vertices (plain copy) ---
             {
                 let mut cursor = new_meta.offset_verts;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, src_verts, ..) = anchor_meta.get_slices();
+                    let size = verts_byte_size(anchor_meta.vert_count);
+                    std::ptr::copy_nonoverlapping(src_verts as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, src_verts, ..) = src_meta.get_slices();
                     let size = verts_byte_size(src_meta.vert_count);
                     std::ptr::copy_nonoverlapping(src_verts as *const u8, dest.add(cursor), size);
@@ -330,8 +344,14 @@ impl AssetMeta {
             // --- Edges (plain copy) ---
             {
                 let mut cursor = new_meta.offset_edges;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, src_edges, ..) = anchor_meta.get_slices();
+                    let size = edges_byte_size(anchor_meta.edge_count);
+                    std::ptr::copy_nonoverlapping(src_edges as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, src_edges, ..) = src_meta.get_slices();
                     let size = edges_byte_size(src_meta.edge_count);
                     std::ptr::copy_nonoverlapping(src_edges as *const u8, dest.add(cursor), size);
@@ -343,8 +363,19 @@ impl AssetMeta {
             {
                 let mut cursor = new_meta.offset_loop_bases;
                 let mut cum_offset = 0u32;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, src_loop_bases, ..) = anchor_meta.get_slices();
+                    let size = loop_bases_byte_size(anchor_meta.loop_count);
+                    let src_ptr = src_loop_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=anchor_meta.loop_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += anchor_meta.loop_count;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, src_loop_bases, ..) = src_meta.get_slices();
                     let size = loop_bases_byte_size(src_meta.loop_count);
                     let src_ptr = src_loop_bases as *const u32;
@@ -360,8 +391,14 @@ impl AssetMeta {
             // --- Loops (plain copy) ---
             {
                 let mut cursor = new_meta.offset_loops;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, src_loops, ..) = anchor_meta.get_slices();
+                    let size = loops_byte_size(anchor_meta.total_loop_lengths);
+                    std::ptr::copy_nonoverlapping(src_loops as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, src_loops, ..) = src_meta.get_slices();
                     let size = loops_byte_size(src_meta.total_loop_lengths);
                     std::ptr::copy_nonoverlapping(src_loops as *const u8, dest.add(cursor), size);
@@ -373,8 +410,19 @@ impl AssetMeta {
             {
                 let mut cursor = new_meta.offset_object_loop_counts;
                 let mut cum_offset = 0u32;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, src_object_loop_counts, ..) = anchor_meta.get_slices();
+                    let size = object_loop_counts_byte_size(anchor_meta.object_count);
+                    let src_ptr = src_object_loop_counts as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=anchor_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += anchor_meta.object_count;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, src_object_loop_counts, ..) = src_meta.get_slices();
                     let size = object_loop_counts_byte_size(src_meta.object_count);
                     let src_ptr = src_object_loop_counts as *const u32;
@@ -390,8 +438,14 @@ impl AssetMeta {
             // --- Transforms (plain copy) ---
             {
                 let mut cursor = new_meta.offset_transforms;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, _, src_transforms, ..) = anchor_meta.get_slices();
+                    let size = transforms_byte_size(anchor_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_transforms as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, _, src_transforms, ..) = src_meta.get_slices();
                     let size = transforms_byte_size(src_meta.object_count);
                     std::ptr::copy_nonoverlapping(src_transforms as *const u8, dest.add(cursor), size);
@@ -403,8 +457,19 @@ impl AssetMeta {
             {
                 let mut cursor = new_meta.offset_vert_bases;
                 let mut cum_offset = 0u32;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, _, _, src_vert_bases, ..) = anchor_meta.get_slices();
+                    let size = vert_counts_byte_size(anchor_meta.object_count);
+                    let src_ptr = src_vert_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=anchor_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += anchor_meta.vert_count;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, _, _, src_vert_bases, ..) = src_meta.get_slices();
                     let size = vert_counts_byte_size(src_meta.object_count);
                     let src_ptr = src_vert_bases as *const u32;
@@ -421,8 +486,19 @@ impl AssetMeta {
             {
                 let mut cursor = new_meta.offset_edge_bases;
                 let mut cum_offset = 0u32;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, _, _, _, src_edge_bases, ..) = anchor_meta.get_slices();
+                    let size = edge_counts_byte_size(anchor_meta.object_count);
+                    let src_ptr = src_edge_bases as *const u32;
+                    let dst_ptr = dest.add(cursor) as *mut u32;
+                    for i in 0..=anchor_meta.object_count {
+                        dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
+                    }
+                    cursor = (cursor + size + 31) & !31;
+                    cum_offset += anchor_meta.edge_count;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, _, _, _, src_edge_bases, ..) = src_meta.get_slices();
                     let size = edge_counts_byte_size(src_meta.object_count);
                     let src_ptr = src_edge_bases as *const u32;
@@ -438,8 +514,14 @@ impl AssetMeta {
             // --- Object names (plain copy) ---
             {
                 let mut cursor = new_meta.offset_object_names;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, _, _, _, _, src_names, ..) = anchor_meta.get_slices();
+                    let size = object_names_byte_size(anchor_meta.object_count);
+                    std::ptr::copy_nonoverlapping(src_names as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, _, _, _, _, src_names, ..) = src_meta.get_slices();
                     let size = object_names_byte_size(src_meta.object_count);
                     std::ptr::copy_nonoverlapping(src_names as *const u8, dest.add(cursor), size);
@@ -449,7 +531,7 @@ impl AssetMeta {
 
             // --- Group name (first source only) ---
             {
-                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let first_src_meta = &*(anchor_meta_ptr as *const AssetMeta);
                 let group_name = first_src_meta.get_group_name();
                 let size = group_name.len();
                 std::ptr::copy_nonoverlapping(
@@ -462,8 +544,14 @@ impl AssetMeta {
             // --- Embeddings (plain copy) ---
             {
                 let mut cursor = new_meta.offset_embeddings;
-                for &src_meta_ptr in sources {
-                    let src_meta = &*(src_meta_ptr as *const AssetMeta);
+                {
+                    let (_, _, _, _, _, _, _, _, _, _, src_embeddings, ..) = anchor_meta.get_slices();
+                    let size = anchor_meta.object_count as usize * 256 * size_of::<f32>();
+                    std::ptr::copy_nonoverlapping(src_embeddings as *const u8, dest.add(cursor), size);
+                    cursor = (cursor + size + 31) & !31;
+                }
+                for &ptr in member_meta_ptrs {
+                    let src_meta = &*(ptr as *const AssetMeta);
                     let (_, _, _, _, _, _, _, _, _, _, src_embeddings, ..) = src_meta.get_slices();
                     let size = src_meta.object_count as usize * 256 * size_of::<f32>();
                     std::ptr::copy_nonoverlapping(src_embeddings as *const u8, dest.add(cursor), size);
@@ -473,7 +561,7 @@ impl AssetMeta {
 
             // --- Canonical transform (first source only) ---
             {
-                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let first_src_meta = &*(anchor_meta_ptr as *const AssetMeta);
                 let (_, _, _, _, _, _, _, _, _, _, _, src_canonical_transform, _) = first_src_meta.get_slices();
                 let size = 16 * size_of::<f32>();
                 std::ptr::copy_nonoverlapping(
@@ -485,7 +573,7 @@ impl AssetMeta {
 
             // --- Asset embedding (first source only) ---
             {
-                let first_src_meta = &*(sources[0] as *const AssetMeta);
+                let first_src_meta = &*(anchor_meta_ptr as *const AssetMeta);
                 let (_, _, _, _, _, _, _, _, _, _, _, _, src_asset_embedding) = first_src_meta.get_slices();
                 let size = 256 * size_of::<f32>();
                 std::ptr::copy_nonoverlapping(
