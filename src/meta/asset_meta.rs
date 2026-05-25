@@ -382,12 +382,12 @@ impl AssetMeta {
                     for i in 0..=anchor_meta.loop_count {
                         dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
                     }
-                    cursor = (cursor + size + 31) & !31;
-                    cum_offset += anchor_meta.loop_count;
+                   cursor = (cursor + size + 31) & !31;
+                    cum_offset += anchor_meta.total_loop_lengths;
                 }
                 for &ptr in member_meta_ptrs {
                     let src_meta = &*(ptr as *const AssetMeta);
-                    let (_, _, _, _, src_loop_bases, ..) = src_meta.get_slices();
+                    let (_, _, _, _, _, src_loop_bases, ..) = src_meta.get_slices();
                     let size = loop_bases_byte_size(src_meta.loop_count);
                     let src_ptr = src_loop_bases as *const u32;
                     let dst_ptr = dest.add(cursor) as *mut u32;
@@ -395,7 +395,7 @@ impl AssetMeta {
                         dst_ptr.add(i as usize).write(src_ptr.add(i as usize).read() + cum_offset);
                     }
                     cursor = (cursor + size + 31) & !31;
-                    cum_offset += src_meta.loop_count;
+                    cum_offset += src_meta.total_loop_lengths;
                 }
             }
 
