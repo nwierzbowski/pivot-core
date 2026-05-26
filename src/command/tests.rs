@@ -4,7 +4,7 @@ use crate::{
     command::{
         EngineCommand, EngineResponse, MeshPublish,
         OP_ALLOC_MEM, OP_DROP_GROUPS, OP_EXPORT_ALL, OP_EXPORT_ASSETS,
-        OP_EXTRACT_GEOMETRIC_FEATURES, OP_GET_SURFACE_TYPES, OP_IMPORT_ASSETS,
+        OP_GET_SURFACE_TYPES, OP_IMPORT_ASSETS,
         OP_ORGANIZE_OBJECTS, OP_SEND_MESH, OP_SET_SURFACE_TYPES,
         OP_STANDARDIZE_GROUPS, OP_STANDARDIZE_SYNCED_GROUPS, OP_STOP_ENGINE,
     },
@@ -47,15 +47,6 @@ fn test_drop_groups_roundtrip() {
     assert_eq!(cmd.op_id, OP_DROP_GROUPS);
     assert_eq!(cmd.should_cache, 1);
     let result = cmd.read_drop_groups().unwrap();
-    assert_eq!(result, &uuids);
-}
-
-#[test]
-fn test_extract_geometric_features_roundtrip() {
-    let uuids = [make_uuid(10), make_uuid(11)];
-    let cmd = EngineCommand::extract_geometric_features(&uuids, 1);
-    assert_eq!(cmd.op_id, OP_EXTRACT_GEOMETRIC_FEATURES);
-    let result = cmd.read_extract_geometric_features().unwrap();
     assert_eq!(result, &uuids);
 }
 

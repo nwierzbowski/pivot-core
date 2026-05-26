@@ -50,14 +50,4 @@ impl MeshPublish {
     pub fn read_organize_objects(&self) -> u16 {
         self.header.status
     }
-
-    // --- 4. extract_geometric_features --------------------------------------
-
-    pub fn extract_geometric_features() -> Self {
-        Self::default()
-    }
-
-    pub fn read_extract_geometric_features(&self) -> u16 {
-        self.header.status
-    }
 }

@@ -165,16 +165,6 @@ impl EngineResponse {
         Ok((uuids, ptrs))
     }
 
-    // --- 10. extract_geometric_features -------------------------------------
-
-    pub fn extract_geometric_features() -> Self {
-        Self::default()
-    }
-
-    pub fn read_extract_geometric_features(&self) -> u16 {
-        self.header.status
-    }
-
     // --- 11. export_assets --------------------------------------------------
 
     pub fn export_assets(filenames: &[&str]) -> Self {
