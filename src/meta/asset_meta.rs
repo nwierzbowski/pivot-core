@@ -274,9 +274,6 @@ impl AssetMeta {
         let mut total_loops = 0u32;
         let mut total_loop_lengths = 0u32;
         let mut object_count = 0u32;
-        let mut surface_context = 0u16;
-        let mut uuid = Uuid { bytes: [0u8; 32] };
-        let mut group_name = String::new();
 
         let anchor_meta = unsafe { &*(anchor_meta_ptr as *const AssetMeta) };
 
@@ -286,9 +283,10 @@ impl AssetMeta {
         total_loops += anchor_meta.loop_count;
         total_loop_lengths += anchor_meta.total_loop_lengths;
         object_count += anchor_meta.object_count;
-        surface_context = anchor_meta.surface_context;
-        uuid = anchor_meta.uuid;
-        group_name = anchor_meta.get_group_name();
+
+        let mut surface_context = anchor_meta.surface_context;
+        let mut uuid = anchor_meta.uuid;
+        let mut group_name = anchor_meta.get_group_name();
 
         for &ptr in member_meta_ptrs {
             let meta = unsafe { &*(ptr as *const AssetMeta) };
