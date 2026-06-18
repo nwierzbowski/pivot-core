@@ -596,4 +596,16 @@ impl EngineCommand {
     pub fn read_embed_all_assets(&self) {
         // No inline data
     }
+
+    // --- 24. export_dup_reset ------------------------------------------------
+
+    pub fn export_dup_reset() -> Self {
+        let mut cmd = Self::default();
+        cmd.op_id = OP_EXPORT_DUP_RESET;
+        cmd
+    }
+
+    pub fn read_export_dup_reset(&self) {
+        // No inline data
+    }
 }
