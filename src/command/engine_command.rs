@@ -397,10 +397,10 @@ impl EngineCommand {
 
     // --- 21. export_all_asset_tbo -------------------------------------------
 
-    pub fn export_all_asset_tbo(path: &str, target_bytes: u64) -> Self {
+    pub fn export_all_asset_tbo(path: &str, target_bytes: u64, skip_normalization: bool) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 8;
+        let total = aligned_after_path + 8 + 1; // path + target_bytes + skip_normalization
         if total > crate::MAX_INLINE_DATA {
             panic!("export_all_asset_tbo: data exceeds buffer capacity");
         }
@@ -412,11 +412,12 @@ impl EngineCommand {
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
             *(base.add(aligned_after_path) as *mut u64) = target_bytes;
+            *base.add(aligned_after_path + 8) = if skip_normalization { 1u8 } else { 0u8 };
         }
         cmd
     }
 
-    pub fn read_export_all_asset_tbo(&self) -> Result<(&str, u64), BufferError> {
+    pub fn read_export_all_asset_tbo(&self) -> Result<(&str, u64, bool), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -426,7 +427,7 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 8 > crate::MAX_INLINE_DATA {
+        if aligned_offset + 9 > crate::MAX_INLINE_DATA {
             return Err(BufferError::Corrupted);
         }
         let target_bytes = u64::from_le_bytes(
@@ -434,7 +435,8 @@ impl EngineCommand {
                 .try_into()
                 .map_err(|_| BufferError::Corrupted)?,
         );
-        Ok((path, target_bytes))
+        let skip_normalization = self.inline_data.as_ref()[aligned_offset + 8] != 0;
+        Ok((path, target_bytes, skip_normalization))
     }
 
     // --- 15. drop_all_groups ------------------------------------------------
