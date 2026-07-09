@@ -194,11 +194,10 @@ impl EngineCommand {
 
     // --- 11. export_assets --------------------------------------------------
 
-    pub fn export_assets(path: &str, target_bytes: u64, uuids: &[Uuid]) -> Self {
+    pub fn export_assets(path: &str, uuids: &[Uuid]) -> Self {
         let path_len = path.len() + 1; // null terminator
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let after_target = aligned_after_path + 8;
-        let aligned_uuid_start = Buffer::align_up(after_target, std::mem::size_of::<Uuid>());
+        let aligned_uuid_start = Buffer::align_up(aligned_after_path, std::mem::size_of::<Uuid>());
         let uuid_size = uuids.len() * std::mem::size_of::<Uuid>();
         let total = aligned_uuid_start + uuid_size;
         if total > crate::MAX_INLINE_DATA {
@@ -212,7 +211,6 @@ impl EngineCommand {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
             std::ptr::copy_nonoverlapping(
                 uuids.as_ptr() as *const u8,
                 base.add(aligned_uuid_start),
@@ -222,7 +220,7 @@ impl EngineCommand {
         cmd
     }
 
-    pub fn read_export_assets(&self) -> Result<(&str, u64, &[Uuid]), BufferError> {
+    pub fn read_export_assets(&self) -> Result<(&str, &[Uuid]), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -232,30 +230,22 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 8 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let target_bytes = u64::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        let uuid_start = Buffer::align_up(aligned_offset + 8, std::mem::size_of::<Uuid>());
+        let uuid_start = Buffer::align_up(aligned_offset, std::mem::size_of::<Uuid>());
         let uuids = unsafe {
             std::slice::from_raw_parts(
                 self.inline_data.as_ptr().add(uuid_start) as *const Uuid,
                 self.num_headers as usize,
             )
         };
-        Ok((path, target_bytes, uuids))
+        Ok((path, uuids))
     }
 
     // --- 12. export_all -----------------------------------------------------
 
-    pub fn export_all(path: &str, target_bytes: u64) -> Self {
+    pub fn export_all(path: &str) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 8;
+        let total = aligned_after_path;
         if total > crate::MAX_INLINE_DATA {
             panic!("export_all: data exceeds buffer capacity");
         }
@@ -266,12 +256,11 @@ impl EngineCommand {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
         }
         cmd
     }
 
-    pub fn read_export_all(&self) -> Result<(&str, u64), BufferError> {
+    pub fn read_export_all(&self) -> Result<&str, BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -280,16 +269,7 @@ impl EngineCommand {
             .ok_or(BufferError::Corrupted)?;
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
-        let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 8 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let target_bytes = u64::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        Ok((path, target_bytes))
+        Ok(path)
     }
 
     // --- 13. import_assets --------------------------------------------------
@@ -339,11 +319,10 @@ impl EngineCommand {
 
     // --- 20. export_asset_tbo -----------------------------------------------
 
-    pub fn export_asset_tbo(path: &str, target_bytes: u64, uuids: &[Uuid]) -> Self {
+    pub fn export_asset_tbo(path: &str, uuids: &[Uuid]) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let after_target = aligned_after_path + 8;
-        let aligned_uuid_start = Buffer::align_up(after_target, std::mem::size_of::<Uuid>());
+        let aligned_uuid_start = Buffer::align_up(aligned_after_path, std::mem::size_of::<Uuid>());
         let uuid_size = uuids.len() * std::mem::size_of::<Uuid>();
         let total = aligned_uuid_start + uuid_size;
         if total > crate::MAX_INLINE_DATA {
@@ -357,7 +336,6 @@ impl EngineCommand {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
             std::ptr::copy_nonoverlapping(
                 uuids.as_ptr() as *const u8,
                 base.add(aligned_uuid_start),
@@ -367,7 +345,7 @@ impl EngineCommand {
         cmd
     }
 
-    pub fn read_export_asset_tbo(&self) -> Result<(&str, u64, &[Uuid]), BufferError> {
+    pub fn read_export_asset_tbo(&self) -> Result<(&str, &[Uuid]), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -377,30 +355,22 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 8 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let target_bytes = u64::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        let uuid_start = Buffer::align_up(aligned_offset + 8, std::mem::size_of::<Uuid>());
+        let uuid_start = Buffer::align_up(aligned_offset, std::mem::size_of::<Uuid>());
         let uuids = unsafe {
             std::slice::from_raw_parts(
                 self.inline_data.as_ptr().add(uuid_start) as *const Uuid,
                 self.num_headers as usize,
             )
         };
-        Ok((path, target_bytes, uuids))
+        Ok((path, uuids))
     }
 
     // --- 21. export_all_asset_tbo -------------------------------------------
 
-    pub fn export_all_asset_tbo(path: &str, target_bytes: u64, skip_normalization: bool) -> Self {
+    pub fn export_all_asset_tbo(path: &str, skip_normalization: bool) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 8 + 1; // path + target_bytes + skip_normalization
+        let total = aligned_after_path + 1; // path + skip_normalization
         if total > crate::MAX_INLINE_DATA {
             panic!("export_all_asset_tbo: data exceeds buffer capacity");
         }
@@ -411,13 +381,12 @@ impl EngineCommand {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
-            *base.add(aligned_after_path + 8) = if skip_normalization { 1u8 } else { 0u8 };
+            *base.add(aligned_after_path) = if skip_normalization { 1u8 } else { 0u8 };
         }
         cmd
     }
 
-    pub fn read_export_all_asset_tbo(&self) -> Result<(&str, u64, bool), BufferError> {
+    pub fn read_export_all_asset_tbo(&self) -> Result<(&str, bool), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -427,16 +396,8 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 9 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let target_bytes = u64::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        let skip_normalization = self.inline_data.as_ref()[aligned_offset + 8] != 0;
-        Ok((path, target_bytes, skip_normalization))
+        let skip_normalization = self.inline_data.as_ref()[aligned_offset] != 0;
+        Ok((path, skip_normalization))
     }
 
     // --- 15. drop_all_groups ------------------------------------------------
@@ -527,11 +488,10 @@ impl EngineCommand {
 
     // --- 19. tbo_flush ------------------------------------------------------
 
-    pub fn tbo_flush(path: &str, target_bytes: u64, batch_offset: u32) -> Self {
+    pub fn tbo_flush(path: &str, batch_offset: u32) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let after_target = aligned_after_path + 8;
-        let total = after_target + 4;
+        let total = aligned_after_path + 4;
         if total > crate::MAX_INLINE_DATA {
             panic!("tbo_flush: data exceeds buffer capacity");
         }
@@ -542,13 +502,12 @@ impl EngineCommand {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u64) = target_bytes;
-            *(base.add(after_target) as *mut u32) = batch_offset;
+            *(base.add(aligned_after_path) as *mut u32) = batch_offset;
         }
         cmd
     }
 
-    pub fn read_tbo_flush(&self) -> Result<(&str, u64, u32), BufferError> {
+    pub fn read_tbo_flush(&self) -> Result<(&str, u32), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -558,20 +517,12 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        if aligned_offset + 8 + 4 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let target_bytes = u64::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
         let batch_offset = u32::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset + 8..aligned_offset + 12]
+            self.inline_data.as_ref()[aligned_offset..aligned_offset + 4]
                 .try_into()
                 .map_err(|_| BufferError::Corrupted)?,
         );
-        Ok((path, target_bytes, batch_offset))
+        Ok((path, batch_offset))
     }
 
     // --- 22. group_all_objects ----------------------------------------------
