@@ -129,7 +129,7 @@ fn test_alloc_request_mismatch_panics() {
 #[test]
 fn test_export_assets_roundtrip() {
     let uuids = [make_uuid(1), make_uuid(2)];
-    let cmd = EngineCommand::export_assets("/tmp/export", 1_048_576, &uuids);
+    let cmd = EngineCommand::export_assets("/tmp/export", &uuids);
     assert_eq!(cmd.op_id, OP_EXPORT_ASSETS);
     let (path, target, read_uuids) = cmd.read_export_assets().unwrap();
     assert_eq!(path, "/tmp/export");
@@ -139,7 +139,7 @@ fn test_export_assets_roundtrip() {
 
 #[test]
 fn test_export_all_roundtrip() {
-    let cmd = EngineCommand::export_all("/tmp/batch", 524_288);
+    let cmd = EngineCommand::export_all("/tmp/batch");
     assert_eq!(cmd.op_id, OP_EXPORT_ALL);
     let (path, target) = cmd.read_export_all().unwrap();
     assert_eq!(path, "/tmp/batch");
