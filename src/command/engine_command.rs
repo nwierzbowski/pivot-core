@@ -365,7 +365,7 @@ impl EngineCommand {
         Ok((path, uuids))
     }
 
-    // --- 21. export_all_asset_tbo -------------------------------------------
+    // --- 19. export_all_asset_tbo -------------------------------------------
 
     pub fn export_all_asset_tbo(path: &str, skip_normalization: bool) -> Self {
         let path_len = path.len() + 1;
@@ -411,103 +411,29 @@ impl EngineCommand {
     pub fn read_drop_all_groups(&self) {
         // No inline data
     }
-    // --- 17. tbo_config -----------------------------------------------------
+    // --- 17. tbo_points_flush ------------------------------------------------
 
-    pub fn tbo_config(channel_mask: u32, target_point_count: u32) -> Self {
-        let total = 4 + 4; // channel_mask(4) + target_point_count(4)
-        if total > crate::MAX_INLINE_DATA {
-            panic!("tbo_config: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_TBO_CONFIG;
-        cmd.should_cache = 0;
-        unsafe {
-            let base = cmd.inline_data.as_mut_ptr();
-            *(base as *mut u32) = channel_mask;
-            *(base.add(4) as *mut u32) = target_point_count;
-        }
-        cmd
-    }
-
-    pub fn read_tbo_config(&self) -> Result<(u32, u32), BufferError> {
-        if 8 > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        let channel_mask = u32::from_le_bytes(
-            self.inline_data.as_ref()[0..4]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        let target_point_count = u32::from_le_bytes(
-            self.inline_data.as_ref()[4..8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        Ok((channel_mask, target_point_count))
-    }
-
-    // --- 18. tbo_downsample -------------------------------------------------
-
-    pub fn tbo_downsample(uuids: &[Uuid]) -> Self {
-        let uuid_size = uuids.len() * std::mem::size_of::<Uuid>();
-        if uuid_size > crate::MAX_INLINE_DATA {
-            panic!("tbo_downsample: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_TBO_DOWNSAMPLE;
-        cmd.num_headers = uuids.len() as u32;
-        cmd.should_cache = 0;
-        if !uuids.is_empty() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    uuids.as_ptr() as *const u8,
-                    cmd.inline_data.as_mut_ptr(),
-                    uuid_size,
-                );
-            }
-        }
-        cmd
-    }
-
-    pub fn read_tbo_downsample(&self) -> Result<&[Uuid], BufferError> {
-        let count = self.num_headers as usize;
-        if count == 0 {
-            return Ok(&[]);
-        }
-        let required = count.checked_mul(std::mem::size_of::<Uuid>()).ok_or(BufferError::Corrupted)?;
-        if required > crate::MAX_INLINE_DATA {
-            return Err(BufferError::Corrupted);
-        }
-        Ok(unsafe {
-            std::slice::from_raw_parts(
-                self.inline_data.as_ptr() as *const Uuid,
-                count,
-            )
-        })
-    }
-
-    // --- 19. tbo_flush ------------------------------------------------------
-
-    pub fn tbo_flush(path: &str, batch_offset: u32) -> Self {
+    pub fn tbo_points_flush(path: &str, channel_mask: u32, target_point_count: u32) -> Self {
         let path_len = path.len() + 1;
         let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 4;
+        let total = aligned_after_path + 4 + 4; // path + channel_mask + target_point_count
         if total > crate::MAX_INLINE_DATA {
-            panic!("tbo_flush: data exceeds buffer capacity");
+            panic!("tbo_points_flush: data exceeds buffer capacity");
         }
         let mut cmd = Self::default();
-        cmd.op_id = OP_TBO_FLUSH;
+        cmd.op_id = OP_TBO_POINTS_FLUSH;
         cmd.should_cache = 0;
         unsafe {
             let base = cmd.inline_data.as_mut_ptr();
             std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
             *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u32) = batch_offset;
+            *(base.add(aligned_after_path) as *mut u32) = channel_mask;
+            *(base.add(aligned_after_path + 4) as *mut u32) = target_point_count;
         }
         cmd
     }
 
-    pub fn read_tbo_flush(&self) -> Result<(&str, u32), BufferError> {
+    pub fn read_tbo_points_flush(&self) -> Result<(&str, u32, u32), BufferError> {
         let path_end = self
             .inline_data
             .as_ref()
@@ -517,15 +443,20 @@ impl EngineCommand {
         let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
             .map_err(|_| BufferError::InvalidUtf8)?;
         let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        let batch_offset = u32::from_le_bytes(
+        let channel_mask = u32::from_le_bytes(
             self.inline_data.as_ref()[aligned_offset..aligned_offset + 4]
                 .try_into()
                 .map_err(|_| BufferError::Corrupted)?,
         );
-        Ok((path, batch_offset))
+        let target_point_count = u32::from_le_bytes(
+            self.inline_data.as_ref()[aligned_offset + 4..aligned_offset + 8]
+                .try_into()
+                .map_err(|_| BufferError::Corrupted)?,
+        );
+        Ok((path, channel_mask, target_point_count))
     }
 
-    // --- 22. group_all_objects ----------------------------------------------
+    // --- 20. group_all_objects ----------------------------------------------
 
     pub fn group_all_objects() -> Self {
         let mut cmd = Self::default();
