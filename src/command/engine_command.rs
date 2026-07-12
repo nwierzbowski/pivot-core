@@ -400,6 +400,46 @@ impl EngineCommand {
         Ok((path, skip_normalization))
     }
 
+    // --- 16. export_all_asset_tbo_transforms --------------------------------
+
+    pub fn export_all_asset_tbo_transforms(path: &str, scene_uuid: [u8; 32]) -> Self {
+        let path_len = path.len() + 1;
+        let aligned_after_path = Buffer::align_up(path_len, 8);
+        let scene_uuid_offset = aligned_after_path;
+        let aligned_after_scene = Buffer::align_up(scene_uuid_offset + 32, 8);
+        let total = aligned_after_scene; // path + scene_uuid
+        if total > crate::MAX_INLINE_DATA {
+            panic!("export_all_asset_tbo_transforms: data exceeds buffer capacity");
+        }
+        let mut cmd = Self::default();
+        cmd.op_id = OP_EXPORT_ALL_ASSET_TBO_TRANSFORMS;
+        cmd.should_cache = 0;
+        unsafe {
+            let base = cmd.inline_data.as_mut_ptr();
+            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
+            *base.add(path_len - 1) = 0;
+            std::ptr::copy_nonoverlapping(scene_uuid.as_ptr(), base.add(scene_uuid_offset), 32);
+        }
+        cmd
+    }
+
+    pub fn read_export_all_asset_tbo_transforms(&self) -> Result<(&str, [u8; 32]), BufferError> {
+        let path_end = self
+            .inline_data
+            .as_ref()
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or(BufferError::Corrupted)?;
+        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
+            .map_err(|_| BufferError::InvalidUtf8)?;
+        let aligned_offset = Buffer::align_up(path_end + 1, 8);
+        let scene_uuid_offset = aligned_offset;
+        let scene_uuid: [u8; 32] = self.inline_data.as_ref()[scene_uuid_offset..scene_uuid_offset + 32]
+            .try_into()
+            .map_err(|_| BufferError::Corrupted)?;
+        Ok((path, scene_uuid))
+    }
+
     // --- 15. drop_all_groups ------------------------------------------------
 
     pub fn drop_all_groups() -> Self {
