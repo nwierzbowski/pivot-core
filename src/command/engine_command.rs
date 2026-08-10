@@ -317,129 +317,6 @@ impl EngineCommand {
         Ok(result)
     }
 
-    // --- 20. export_asset_tbo -----------------------------------------------
-
-    pub fn export_asset_tbo(path: &str, uuids: &[Uuid]) -> Self {
-        let path_len = path.len() + 1;
-        let aligned_after_path = Buffer::align_up(path_len, 8);
-        let aligned_uuid_start = Buffer::align_up(aligned_after_path, std::mem::size_of::<Uuid>());
-        let uuid_size = uuids.len() * std::mem::size_of::<Uuid>();
-        let total = aligned_uuid_start + uuid_size;
-        if total > crate::MAX_INLINE_DATA {
-            panic!("export_asset_tbo: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_EXPORT_ASSET_TBO;
-        cmd.num_headers = uuids.len() as u32;
-        cmd.should_cache = 0;
-        unsafe {
-            let base = cmd.inline_data.as_mut_ptr();
-            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
-            *base.add(path_len - 1) = 0;
-            std::ptr::copy_nonoverlapping(
-                uuids.as_ptr() as *const u8,
-                base.add(aligned_uuid_start),
-                uuid_size,
-            );
-        }
-        cmd
-    }
-
-    pub fn read_export_asset_tbo(&self) -> Result<(&str, &[Uuid]), BufferError> {
-        let path_end = self
-            .inline_data
-            .as_ref()
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or(BufferError::Corrupted)?;
-        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
-            .map_err(|_| BufferError::InvalidUtf8)?;
-        let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        let uuid_start = Buffer::align_up(aligned_offset, std::mem::size_of::<Uuid>());
-        let uuids = unsafe {
-            std::slice::from_raw_parts(
-                self.inline_data.as_ptr().add(uuid_start) as *const Uuid,
-                self.num_headers as usize,
-            )
-        };
-        Ok((path, uuids))
-    }
-
-    // --- 19. export_all_asset_tbo -------------------------------------------
-
-    pub fn export_all_asset_tbo(path: &str, skip_normalization: bool) -> Self {
-        let path_len = path.len() + 1;
-        let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 1; // path + skip_normalization
-        if total > crate::MAX_INLINE_DATA {
-            panic!("export_all_asset_tbo: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_EXPORT_ALL_ASSET_TBO;
-        cmd.should_cache = 0;
-        unsafe {
-            let base = cmd.inline_data.as_mut_ptr();
-            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
-            *base.add(path_len - 1) = 0;
-            *base.add(aligned_after_path) = if skip_normalization { 1u8 } else { 0u8 };
-        }
-        cmd
-    }
-
-    pub fn read_export_all_asset_tbo(&self) -> Result<(&str, bool), BufferError> {
-        let path_end = self
-            .inline_data
-            .as_ref()
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or(BufferError::Corrupted)?;
-        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
-            .map_err(|_| BufferError::InvalidUtf8)?;
-        let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        let skip_normalization = self.inline_data.as_ref()[aligned_offset] != 0;
-        Ok((path, skip_normalization))
-    }
-
-    // --- 16. export_all_asset_tbo_transforms --------------------------------
-
-    pub fn export_all_asset_tbo_transforms(path: &str, scene_uuid: [u8; 32]) -> Self {
-        let path_len = path.len() + 1;
-        let aligned_after_path = Buffer::align_up(path_len, 8);
-        let scene_uuid_offset = aligned_after_path;
-        let aligned_after_scene = Buffer::align_up(scene_uuid_offset + 32, 8);
-        let total = aligned_after_scene; // path + scene_uuid
-        if total > crate::MAX_INLINE_DATA {
-            panic!("export_all_asset_tbo_transforms: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_EXPORT_ALL_ASSET_TBO_TRANSFORMS;
-        cmd.should_cache = 0;
-        unsafe {
-            let base = cmd.inline_data.as_mut_ptr();
-            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
-            *base.add(path_len - 1) = 0;
-            std::ptr::copy_nonoverlapping(scene_uuid.as_ptr(), base.add(scene_uuid_offset), 32);
-        }
-        cmd
-    }
-
-    pub fn read_export_all_asset_tbo_transforms(&self) -> Result<(&str, [u8; 32]), BufferError> {
-        let path_end = self
-            .inline_data
-            .as_ref()
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or(BufferError::Corrupted)?;
-        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
-            .map_err(|_| BufferError::InvalidUtf8)?;
-        let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        let scene_uuid_offset = aligned_offset;
-        let scene_uuid: [u8; 32] = self.inline_data.as_ref()[scene_uuid_offset..scene_uuid_offset + 32]
-            .try_into()
-            .map_err(|_| BufferError::Corrupted)?;
-        Ok((path, scene_uuid))
-    }
-
     // --- 15. drop_all_groups ------------------------------------------------
 
     pub fn drop_all_groups() -> Self {
@@ -450,50 +327,6 @@ impl EngineCommand {
 
     pub fn read_drop_all_groups(&self) {
         // No inline data
-    }
-    // --- 17. tbo_points_flush ------------------------------------------------
-
-    pub fn tbo_points_flush(path: &str, channel_mask: u32, target_point_count: u32) -> Self {
-        let path_len = path.len() + 1;
-        let aligned_after_path = Buffer::align_up(path_len, 8);
-        let total = aligned_after_path + 4 + 4; // path + channel_mask + target_point_count
-        if total > crate::MAX_INLINE_DATA {
-            panic!("tbo_points_flush: data exceeds buffer capacity");
-        }
-        let mut cmd = Self::default();
-        cmd.op_id = OP_TBO_POINTS_FLUSH;
-        cmd.should_cache = 0;
-        unsafe {
-            let base = cmd.inline_data.as_mut_ptr();
-            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
-            *base.add(path_len - 1) = 0;
-            *(base.add(aligned_after_path) as *mut u32) = channel_mask;
-            *(base.add(aligned_after_path + 4) as *mut u32) = target_point_count;
-        }
-        cmd
-    }
-
-    pub fn read_tbo_points_flush(&self) -> Result<(&str, u32, u32), BufferError> {
-        let path_end = self
-            .inline_data
-            .as_ref()
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or(BufferError::Corrupted)?;
-        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
-            .map_err(|_| BufferError::InvalidUtf8)?;
-        let aligned_offset = Buffer::align_up(path_end + 1, 8);
-        let channel_mask = u32::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset..aligned_offset + 4]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        let target_point_count = u32::from_le_bytes(
-            self.inline_data.as_ref()[aligned_offset + 4..aligned_offset + 8]
-                .try_into()
-                .map_err(|_| BufferError::Corrupted)?,
-        );
-        Ok((path, channel_mask, target_point_count))
     }
 
     // --- 20. group_all_objects ----------------------------------------------
@@ -508,17 +341,105 @@ impl EngineCommand {
         // No inline data
     }
 
-    // --- 23. embed_all_assets -----------------------------------------------
+    // --- 23. tbo_export -------------------------------------------------------
 
-    pub fn embed_all_assets(should_cache: u16) -> Self {
+    pub fn tbo_export(
+        path: &str,
+        scene_uuid: [u8; 32],
+        scene_transform: bool,
+        scene_similarity: bool,
+        asset_embedding: bool,
+        asset_transform: bool,
+        fragment_xyz: bool,
+        normal_variance: bool,
+        surface_variation: bool,
+        combined: bool,
+        target_point_count: u32,
+    ) -> Self {
+        let path_len = path.len() + 1;
+        let aligned_after_path = Buffer::align_up(path_len, 8);
+        let scene_uuid_offset = aligned_after_path;
+        let aligned_after_scene = Buffer::align_up(scene_uuid_offset + 32, 8);
+        let bools_offset = aligned_after_scene;
+        let aligned_after_bools = Buffer::align_up(bools_offset + 5, 8);
+        let total = aligned_after_bools + 4; // target_point_count
+        if total > crate::MAX_INLINE_DATA {
+            panic!("tbo_export: data exceeds buffer capacity");
+        }
         let mut cmd = Self::default();
-        cmd.op_id = OP_EMBED_ALL_ASSETS;
-        cmd.should_cache = should_cache;
+        cmd.op_id = OP_TBO_EXPORT;
+        cmd.should_cache = 0;
+        unsafe {
+            let base = cmd.inline_data.as_mut_ptr();
+            // Write path
+            std::ptr::copy_nonoverlapping(path.as_ptr(), base, path_len - 1);
+            *base.add(path_len - 1) = 0;
+            // Write scene_uuid
+            std::ptr::copy_nonoverlapping(scene_uuid.as_ptr(), base.add(scene_uuid_offset), 32);
+            // Write bools
+            let bools = base.add(bools_offset);
+            *bools.add(0) = if scene_transform { 1 } else { 0 };
+            *bools.add(1) = if scene_similarity { 1 } else { 0 };
+            *bools.add(2) = if asset_embedding { 1 } else { 0 };
+            *bools.add(3) = if asset_transform { 1 } else { 0 };
+            *bools.add(4) = if fragment_xyz { 1 } else { 0 };
+            // Write remaining bools and target_point_count
+            *bools.add(5) = if normal_variance { 1 } else { 0 };
+            *bools.add(6) = if surface_variation { 1 } else { 0 };
+            *bools.add(7) = if combined { 1 } else { 0 };
+            *(base.add(aligned_after_bools) as *mut u32) = target_point_count;
+        }
         cmd
     }
 
-    pub fn read_embed_all_assets(&self) {
-        // No inline data
+    pub fn read_tbo_export(&self) -> Result<(
+        &str,
+        [u8; 32],
+        bool, bool,
+        bool, bool,
+        bool, bool, bool, bool,
+        u32,
+    ), BufferError> {
+        // Read path
+        let path_end = self
+            .inline_data
+            .as_ref()
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or(BufferError::Corrupted)?;
+        let path = std::str::from_utf8(&self.inline_data.as_ref()[..path_end])
+            .map_err(|_| BufferError::InvalidUtf8)?;
+        let aligned_offset = Buffer::align_up(path_end + 1, 8);
+        // Read scene_uuid
+        let scene_uuid_offset = aligned_offset;
+        let scene_uuid: [u8; 32] = self.inline_data.as_ref()[scene_uuid_offset..scene_uuid_offset + 32]
+            .try_into()
+            .map_err(|_| BufferError::Corrupted)?;
+        // Read bools
+        let aligned_after_scene = Buffer::align_up(scene_uuid_offset + 32, 8);
+        let bools_offset = aligned_after_scene;
+        let scene_transform = self.inline_data.as_ref()[bools_offset] != 0;
+        let scene_similarity = self.inline_data.as_ref()[bools_offset + 1] != 0;
+        let asset_embedding = self.inline_data.as_ref()[bools_offset + 2] != 0;
+        let asset_transform = self.inline_data.as_ref()[bools_offset + 3] != 0;
+        let fragment_xyz = self.inline_data.as_ref()[bools_offset + 4] != 0;
+        let normal_variance = self.inline_data.as_ref()[bools_offset + 5] != 0;
+        let surface_variation = self.inline_data.as_ref()[bools_offset + 6] != 0;
+        let combined = self.inline_data.as_ref()[bools_offset + 7] != 0;
+        // Read target_point_count
+        let aligned_after_bools = Buffer::align_up(bools_offset + 8, 8);
+        let target_point_count = u32::from_le_bytes(
+            self.inline_data.as_ref()[aligned_after_bools..aligned_after_bools + 4]
+                .try_into()
+                .map_err(|_| BufferError::Corrupted)?,
+        );
+        Ok((
+            path, scene_uuid,
+            scene_transform, scene_similarity,
+            asset_embedding, asset_transform,
+            fragment_xyz, normal_variance, surface_variation, combined,
+            target_point_count,
+        ))
     }
 
-  }
+}

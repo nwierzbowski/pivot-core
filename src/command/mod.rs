@@ -36,12 +36,8 @@ pub const OP_EXPORT_ASSETS: u16 = 11;
 pub const OP_IMPORT_ASSETS: u16 = 12;
 pub const OP_EXPORT_ALL: u16 = 13;
 pub const OP_DROP_ALL_GROUPS: u16 = 15;
-pub const OP_TBO_POINTS_FLUSH: u16 = 17;
-pub const OP_EXPORT_ASSET_TBO: u16 = 18;
-pub const OP_EXPORT_ALL_ASSET_TBO: u16 = 19;
 pub const OP_GROUP_ALL_OBJECTS: u16 = 20;
-pub const OP_EMBED_ALL_ASSETS: u16 = 21;
-pub const OP_EXPORT_ALL_ASSET_TBO_TRANSFORMS: u16 = 22;
+pub const OP_TBO_EXPORT: u16 = 23;
 
 // ============================================================================
 // Wire types
