@@ -243,19 +243,27 @@ impl EngineResponse {
     //   scene_count:     u64  @0
     //   asset_count:     u64  @8
     //   fragment_count:  u64  @16
-    //   scene_bytes:     u64  @24
-    //   asset_bytes:     u64  @32
-    //   fragment_bytes:  u64  @40
+    //   points_count:    u64  @24
+    //   faces_count:     u64  @32
+    //   scene_bytes:     u64  @40
+    //   asset_bytes:     u64  @48
+    //   fragment_bytes:  u64  @56
+    //   points_bytes:    u64  @64
+    //   faces_bytes:     u64  @72
 
     pub fn tbo_export_response(
         scene_count: u64,
         asset_count: u64,
         fragment_count: u64,
+        points_count: u64,
+        faces_count: u64,
         scene_bytes: u64,
         asset_bytes: u64,
         fragment_bytes: u64,
+        points_bytes: u64,
+        faces_bytes: u64,
     ) -> Self {
-        let total = 48usize;
+        let total = 80usize;
         if total > crate::MAX_INLINE_DATA {
             panic!("tbo_export_response: data exceeds buffer capacity");
         }
@@ -265,21 +273,29 @@ impl EngineResponse {
             *(base as *mut u64) = scene_count.to_le();
             *(base.add(8) as *mut u64) = asset_count.to_le();
             *(base.add(16) as *mut u64) = fragment_count.to_le();
-            *(base.add(24) as *mut u64) = scene_bytes.to_le();
-            *(base.add(32) as *mut u64) = asset_bytes.to_le();
-            *(base.add(40) as *mut u64) = fragment_bytes.to_le();
+            *(base.add(24) as *mut u64) = points_count.to_le();
+            *(base.add(32) as *mut u64) = faces_count.to_le();
+            *(base.add(40) as *mut u64) = scene_bytes.to_le();
+            *(base.add(48) as *mut u64) = asset_bytes.to_le();
+            *(base.add(56) as *mut u64) = fragment_bytes.to_le();
+            *(base.add(64) as *mut u64) = points_bytes.to_le();
+            *(base.add(72) as *mut u64) = faces_bytes.to_le();
         }
         resp
     }
 
-    pub fn read_tbo_export_response(&self) -> Result<(u64, u64, u64, u64, u64, u64), BufferError> {
+    pub fn read_tbo_export_response(&self) -> Result<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), BufferError> {
         let data = self.inline_data.as_ref();
         let scene_count = u64::from_le_bytes(data[0..8].try_into().map_err(|_| BufferError::Corrupted)?);
         let asset_count = u64::from_le_bytes(data[8..16].try_into().map_err(|_| BufferError::Corrupted)?);
         let fragment_count = u64::from_le_bytes(data[16..24].try_into().map_err(|_| BufferError::Corrupted)?);
-        let scene_bytes = u64::from_le_bytes(data[24..32].try_into().map_err(|_| BufferError::Corrupted)?);
-        let asset_bytes = u64::from_le_bytes(data[32..40].try_into().map_err(|_| BufferError::Corrupted)?);
-        let fragment_bytes = u64::from_le_bytes(data[40..48].try_into().map_err(|_| BufferError::Corrupted)?);
-        Ok((scene_count, asset_count, fragment_count, scene_bytes, asset_bytes, fragment_bytes))
+        let points_count = u64::from_le_bytes(data[24..32].try_into().map_err(|_| BufferError::Corrupted)?);
+        let faces_count = u64::from_le_bytes(data[32..40].try_into().map_err(|_| BufferError::Corrupted)?);
+        let scene_bytes = u64::from_le_bytes(data[40..48].try_into().map_err(|_| BufferError::Corrupted)?);
+        let asset_bytes = u64::from_le_bytes(data[48..56].try_into().map_err(|_| BufferError::Corrupted)?);
+        let fragment_bytes = u64::from_le_bytes(data[56..64].try_into().map_err(|_| BufferError::Corrupted)?);
+        let points_bytes = u64::from_le_bytes(data[64..72].try_into().map_err(|_| BufferError::Corrupted)?);
+        let faces_bytes = u64::from_le_bytes(data[72..80].try_into().map_err(|_| BufferError::Corrupted)?);
+        Ok((scene_count, asset_count, fragment_count, points_count, faces_count, scene_bytes, asset_bytes, fragment_bytes, points_bytes, faces_bytes))
     }
 }

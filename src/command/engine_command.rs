@@ -349,22 +349,32 @@ impl EngineCommand {
     //   slab_scene_name:     [u8; 64]  @0
     //   slab_asset_name:     [u8; 64]  @64
     //   slab_fragment_name:  [u8; 64]  @128
-    //   scene_data_ptr:      u64       @192
-    //   scene_offset_ptr:    u64       @200
-    //   scene_remaining:     u64       @208
-    //   asset_data_ptr:      u64       @216
-    //   asset_offset_ptr:    u64       @224
-    //   asset_remaining:     u64       @232
-    //   frag_data_ptr:       u64       @240
-    //   frag_offset_ptr:     u64       @248
-    //   frag_remaining:      u64       @256
-    //   flags:               8 × u8    @264
-    //   target_point_count:  u32       @272 (aligned @276)
+    //   slab_points_name:    [u8; 64]  @192
+    //   slab_faces_name:     [u8; 64]  @256
+    //   scene_data_ptr:      u64       @320
+    //   scene_offset_ptr:    u64       @328
+    //   scene_remaining:     u64       @336
+    //   asset_data_ptr:      u64       @344
+    //   asset_offset_ptr:    u64       @352
+    //   asset_remaining:     u64       @360
+    //   frag_data_ptr:       u64       @368
+    //   frag_offset_ptr:     u64       @376
+    //   frag_remaining:      u64       @384
+    //   points_data_ptr:     u64       @392
+    //   points_offset_ptr:   u64       @400
+    //   points_remaining:    u64       @408
+    //   faces_data_ptr:      u64       @416
+    //   faces_offset_ptr:    u64       @424
+    //   faces_remaining:     u64       @432
+    //   flags:               10 × u8   @440
+    //   target_point_count:  u32       @450 (aligned @456)
 
     pub fn tbo_export(
         slab_scene_name: &[u8; 64],
         slab_asset_name: &[u8; 64],
         slab_fragment_name: &[u8; 64],
+        slab_points_name: &[u8; 64],
+        slab_faces_name: &[u8; 64],
         scene_data_ptr: u64,
         scene_offset_ptr: u64,
         scene_remaining: u64,
@@ -374,6 +384,12 @@ impl EngineCommand {
         frag_data_ptr: u64,
         frag_offset_ptr: u64,
         frag_remaining: u64,
+        points_data_ptr: u64,
+        points_offset_ptr: u64,
+        points_remaining: u64,
+        faces_data_ptr: u64,
+        faces_offset_ptr: u64,
+        faces_remaining: u64,
         scene_transform: bool,
         scene_similarity: bool,
         asset_embedding: bool,
@@ -382,9 +398,11 @@ impl EngineCommand {
         normal_variance: bool,
         surface_variation: bool,
         combined: bool,
+        points_original: bool,
+        faces: bool,
         target_point_count: u32,
     ) -> Self {
-        let total = Buffer::align_up(276 + 4, 8);
+        let total = Buffer::align_up(450 + 4, 8);
         if total > crate::MAX_INLINE_DATA {
             panic!("tbo_export: data exceeds buffer capacity");
         }
@@ -396,16 +414,24 @@ impl EngineCommand {
             std::ptr::copy_nonoverlapping(slab_scene_name.as_ptr(), base, 64);
             std::ptr::copy_nonoverlapping(slab_asset_name.as_ptr(), base.add(64), 64);
             std::ptr::copy_nonoverlapping(slab_fragment_name.as_ptr(), base.add(128), 64);
-            *(base.add(192) as *mut u64) = scene_data_ptr.to_le();
-            *(base.add(200) as *mut u64) = scene_offset_ptr.to_le();
-            *(base.add(208) as *mut u64) = scene_remaining.to_le();
-            *(base.add(216) as *mut u64) = asset_data_ptr.to_le();
-            *(base.add(224) as *mut u64) = asset_offset_ptr.to_le();
-            *(base.add(232) as *mut u64) = asset_remaining.to_le();
-            *(base.add(240) as *mut u64) = frag_data_ptr.to_le();
-            *(base.add(248) as *mut u64) = frag_offset_ptr.to_le();
-            *(base.add(256) as *mut u64) = frag_remaining.to_le();
-            let flags = base.add(264);
+            std::ptr::copy_nonoverlapping(slab_points_name.as_ptr(), base.add(192), 64);
+            std::ptr::copy_nonoverlapping(slab_faces_name.as_ptr(), base.add(256), 64);
+            *(base.add(320) as *mut u64) = scene_data_ptr.to_le();
+            *(base.add(328) as *mut u64) = scene_offset_ptr.to_le();
+            *(base.add(336) as *mut u64) = scene_remaining.to_le();
+            *(base.add(344) as *mut u64) = asset_data_ptr.to_le();
+            *(base.add(352) as *mut u64) = asset_offset_ptr.to_le();
+            *(base.add(360) as *mut u64) = asset_remaining.to_le();
+            *(base.add(368) as *mut u64) = frag_data_ptr.to_le();
+            *(base.add(376) as *mut u64) = frag_offset_ptr.to_le();
+            *(base.add(384) as *mut u64) = frag_remaining.to_le();
+            *(base.add(392) as *mut u64) = points_data_ptr.to_le();
+            *(base.add(400) as *mut u64) = points_offset_ptr.to_le();
+            *(base.add(408) as *mut u64) = points_remaining.to_le();
+            *(base.add(416) as *mut u64) = faces_data_ptr.to_le();
+            *(base.add(424) as *mut u64) = faces_offset_ptr.to_le();
+            *(base.add(432) as *mut u64) = faces_remaining.to_le();
+            let flags = base.add(440);
             *flags.add(0) = if scene_transform { 1 } else { 0 };
             *flags.add(1) = if scene_similarity { 1 } else { 0 };
             *flags.add(2) = if asset_embedding { 1 } else { 0 };
@@ -414,53 +440,71 @@ impl EngineCommand {
             *flags.add(5) = if normal_variance { 1 } else { 0 };
             *flags.add(6) = if surface_variation { 1 } else { 0 };
             *flags.add(7) = if combined { 1 } else { 0 };
-            *(base.add(276) as *mut u32) = target_point_count.to_le();
+            *flags.add(8) = if points_original { 1 } else { 0 };
+            *flags.add(9) = if faces { 1 } else { 0 };
+            *(base.add(452) as *mut u32) = target_point_count.to_le();
         }
         cmd
     }
 
     pub fn read_tbo_export(&self) -> Result<(
-        [u8; 64], [u8; 64], [u8; 64],
+        [u8; 64], [u8; 64], [u8; 64], [u8; 64], [u8; 64],
+        u64, u64, u64,
+        u64, u64, u64,
         u64, u64, u64,
         u64, u64, u64,
         u64, u64, u64,
         bool, bool,
         bool, bool,
         bool, bool, bool, bool,
+        bool, bool,
         u32,
     ), BufferError> {
         let data = self.inline_data.as_ref();
         let slab_scene_name: [u8; 64] = data[0..64].try_into().map_err(|_| BufferError::Corrupted)?;
         let slab_asset_name: [u8; 64] = data[64..128].try_into().map_err(|_| BufferError::Corrupted)?;
         let slab_fragment_name: [u8; 64] = data[128..192].try_into().map_err(|_| BufferError::Corrupted)?;
-        let scene_data_ptr = u64::from_le_bytes(data[192..200].try_into().map_err(|_| BufferError::Corrupted)?);
-        let scene_offset_ptr = u64::from_le_bytes(data[200..208].try_into().map_err(|_| BufferError::Corrupted)?);
-        let scene_remaining = u64::from_le_bytes(data[208..216].try_into().map_err(|_| BufferError::Corrupted)?);
-        let asset_data_ptr = u64::from_le_bytes(data[216..224].try_into().map_err(|_| BufferError::Corrupted)?);
-        let asset_offset_ptr = u64::from_le_bytes(data[224..232].try_into().map_err(|_| BufferError::Corrupted)?);
-        let asset_remaining = u64::from_le_bytes(data[232..240].try_into().map_err(|_| BufferError::Corrupted)?);
-        let frag_data_ptr = u64::from_le_bytes(data[240..248].try_into().map_err(|_| BufferError::Corrupted)?);
-        let frag_offset_ptr = u64::from_le_bytes(data[248..256].try_into().map_err(|_| BufferError::Corrupted)?);
-        let frag_remaining = u64::from_le_bytes(data[256..264].try_into().map_err(|_| BufferError::Corrupted)?);
-        let scene_transform = data[264] != 0;
-        let scene_similarity = data[265] != 0;
-        let asset_embedding = data[266] != 0;
-        let asset_transform = data[267] != 0;
-        let fragment_xyz = data[268] != 0;
-        let normal_variance = data[269] != 0;
-        let surface_variation = data[270] != 0;
-        let combined = data[271] != 0;
+        let slab_points_name: [u8; 64] = data[192..256].try_into().map_err(|_| BufferError::Corrupted)?;
+        let slab_faces_name: [u8; 64] = data[256..320].try_into().map_err(|_| BufferError::Corrupted)?;
+        let scene_data_ptr = u64::from_le_bytes(data[320..328].try_into().map_err(|_| BufferError::Corrupted)?);
+        let scene_offset_ptr = u64::from_le_bytes(data[328..336].try_into().map_err(|_| BufferError::Corrupted)?);
+        let scene_remaining = u64::from_le_bytes(data[336..344].try_into().map_err(|_| BufferError::Corrupted)?);
+        let asset_data_ptr = u64::from_le_bytes(data[344..352].try_into().map_err(|_| BufferError::Corrupted)?);
+        let asset_offset_ptr = u64::from_le_bytes(data[352..360].try_into().map_err(|_| BufferError::Corrupted)?);
+        let asset_remaining = u64::from_le_bytes(data[360..368].try_into().map_err(|_| BufferError::Corrupted)?);
+        let frag_data_ptr = u64::from_le_bytes(data[368..376].try_into().map_err(|_| BufferError::Corrupted)?);
+        let frag_offset_ptr = u64::from_le_bytes(data[376..384].try_into().map_err(|_| BufferError::Corrupted)?);
+        let frag_remaining = u64::from_le_bytes(data[384..392].try_into().map_err(|_| BufferError::Corrupted)?);
+        let points_data_ptr = u64::from_le_bytes(data[392..400].try_into().map_err(|_| BufferError::Corrupted)?);
+        let points_offset_ptr = u64::from_le_bytes(data[400..408].try_into().map_err(|_| BufferError::Corrupted)?);
+        let points_remaining = u64::from_le_bytes(data[408..416].try_into().map_err(|_| BufferError::Corrupted)?);
+        let faces_data_ptr = u64::from_le_bytes(data[416..424].try_into().map_err(|_| BufferError::Corrupted)?);
+        let faces_offset_ptr = u64::from_le_bytes(data[424..432].try_into().map_err(|_| BufferError::Corrupted)?);
+        let faces_remaining = u64::from_le_bytes(data[432..440].try_into().map_err(|_| BufferError::Corrupted)?);
+        let scene_transform = data[440] != 0;
+        let scene_similarity = data[441] != 0;
+        let asset_embedding = data[442] != 0;
+        let asset_transform = data[443] != 0;
+        let fragment_xyz = data[444] != 0;
+        let normal_variance = data[445] != 0;
+        let surface_variation = data[446] != 0;
+        let combined = data[447] != 0;
+        let points_original = data[448] != 0;
+        let faces = data[449] != 0;
         let target_point_count = u32::from_le_bytes(
-            data[276..280].try_into().map_err(|_| BufferError::Corrupted)?,
+            data[452..456].try_into().map_err(|_| BufferError::Corrupted)?,
         );
         Ok((
-            slab_scene_name, slab_asset_name, slab_fragment_name,
+            slab_scene_name, slab_asset_name, slab_fragment_name, slab_points_name, slab_faces_name,
             scene_data_ptr, scene_offset_ptr, scene_remaining,
             asset_data_ptr, asset_offset_ptr, asset_remaining,
             frag_data_ptr, frag_offset_ptr, frag_remaining,
+            points_data_ptr, points_offset_ptr, points_remaining,
+            faces_data_ptr, faces_offset_ptr, faces_remaining,
             scene_transform, scene_similarity,
             asset_embedding, asset_transform,
             fragment_xyz, normal_variance, surface_variation, combined,
+            points_original, faces,
             target_point_count,
         ))
     }
